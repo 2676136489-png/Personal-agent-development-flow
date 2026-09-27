@@ -183,20 +183,16 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 
 ---
 
-## 8. 设计上刻意不做的选择
+## 8. 范围边界
+
+这几条是**有意识划出去的**，不是待办：
 
 | 不做 | 原因 |
 |---|---|
-| Multi-Agent | 7 个节点共享同一份 State 和同一个 LLM client，它们是一个 Agent 的**阶段**，不是多个互相通信的 Agent |
-| 复杂 Memory | `messages` + State 里的 evidence 列表已够用 |
-| 并行子任务 | 当前没有明确瓶颈 |
-| 跨进程恢复 | 见 §7，需要时换 checkpointer 即可，不必提前上 |
+| Multi-Agent | 7 个节点共享同一份 State 和同一个 LLM client —— 它们是一个 Agent 的**阶段**。拆成多个 Agent 只是多一层消息传递与状态同步，职责并没有变化 |
+| 复杂 Memory | `messages` + State 里的 evidence 列表够用。向量记忆是另一个问题，和「结论能不能溯源」无关 |
+| 并行子问题检索 | 检索只占整轮耗时的零头，并行省不下时间，却要为 State 合并与「部分子问题失败」的收敛多加一层判断 |
+| 跨进程恢复 | 见 §7。换成 SQLite checkpointer 是配置级改动，等真有多实例需求再上 |
 
----
-
-## 9. 可以继续扩展的方向
-
-- 知识库接真实 embedding 模型，把检索从字面匹配升级为语义检索（相关度门槛与证据过滤规则已经就位）
-- 报告导出 PDF / Word
-- 引用定位到具体段落与页码
-- 多用户隔离与鉴权，支持多人协作同一份研究报告
+判据同样简单：新需求如果不同时增强「证据可溯源 / 过程可观察 / 结论可复核」这三条之一，就不进这一版。
+架构取舍的完整推演在 [`docs/01-architecture.md`](docs/01-architecture.md)。
