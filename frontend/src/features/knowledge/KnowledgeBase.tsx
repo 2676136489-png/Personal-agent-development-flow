@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { listDocuments, searchKnowledge, uploadDocument } from '../../api/knowledge'
 import { ApiClientError } from '../../api/client'
 import { StatusBadge } from '../../components/StatusBadge'
+import { PageHeader } from '../../components/PageHeader'
 import { EmptyState } from '../../components/EmptyState'
 import { LoadingState } from '../../components/LoadingState'
 import { ErrorState } from '../../components/ErrorState'
@@ -59,18 +60,21 @@ export function KnowledgeBase() {
 
   return (
     <section className="panel">
-      <header className="panel__header">
-        <div>
-          <p className="eyebrow">知识库</p>
-          <h2 className="panel__title">喂一份资料，它就能引用</h2>
-          <p className="panel__subtitle">
-            上传 PDF / Markdown / TXT，系统自动解析、切块、向量化，供研究智能体在检索时引用，让结论有据可依。
-          </p>
-        </div>
-        <button className="button" onClick={() => void refresh()} disabled={listLoading}>
-          {listLoading ? '刷新中…' : '刷新'}
-        </button>
-      </header>
+      <PageHeader
+        eyebrow="知识库"
+        title="喂一份资料，它就能引用"
+        lede="上传 PDF / Markdown / TXT，系统自动解析、切块、向量化，供研究智能体在检索时引用，让结论有据可依。"
+        notes={[
+          { term: '能做什么', desc: '把私有文档变成可被检索、可被引用、带页码出处的证据源。' },
+          { term: '怎么用', desc: '上传文件 → 等解析完成 → 研究时它会自动参与检索并在报告里标注出处。' },
+          { term: '注意', desc: '单文件上限 10MB；解析期间该文件不会立刻可被检索。' },
+        ]}
+        actions={
+          <button className="button" onClick={() => void refresh()} disabled={listLoading}>
+            {listLoading ? '刷新中…' : '刷新列表'}
+          </button>
+        }
+      />
 
       <div className="panel__notes">
         <div>

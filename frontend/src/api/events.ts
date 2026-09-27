@@ -1,4 +1,4 @@
-import { apiUrl } from './client'
+import { apiGet, apiUrl } from './client'
 import { RUN_EVENT_TYPES, isTerminalEvent, type RunEvent } from '../types/events'
 
 /**
@@ -17,7 +17,6 @@ export interface RunEventHandlers {
 
 export function subscribeRunEvents(threadId: string, handlers: RunEventHandlers): EventSource {
   const source = new EventSource(apiUrl(`/api/graph/research/${threadId}/events`))
-
   const listener = (raw: MessageEvent<string>) => {
     let event: RunEvent
     try {
@@ -39,4 +38,21 @@ export function subscribeRunEvents(threadId: string, handlers: RunEventHandlers)
   source.onerror = () => handlers.onError?.()
 
   return source
+}
+
+/**
+ * [B37] 事件轮询：SSE 不可用时的替代通道。
+ *
+ * 为什么需要：云端网关会把 `text/event-stream` 整条响应缓冲住，
+ * 连响应头都不下发 —— EventSource 永远停在 CONNECTING，前端只能手动刷新。
+ * 这个接口是普通 JSON，不会被缓冲。
+ */
+export async function fetchRunEvents(
+  threadId: string,
+  afterId: number,
+): Promise<{ events: RunEvent[]; lastId: number }> {
+  const data = await apiGet<{ events: RunEvent[]; last_id: number }>(
+    `/api/graph/runs/${threadId}/events?after=${afterId}`,
+  )
+  return { events: data.events ?? [], lastId: data.last_id ?? afterId }
 }

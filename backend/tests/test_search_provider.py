@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 import pytest
 
+from app.search.errors import SearchProviderError
 from app.search.quota import Reservation
 from app.tools.base import ToolContext
 from app.tools.search_provider import (
@@ -239,12 +240,19 @@ async def test_429_without_balance_is_quota_exhausted():
 
 @pytest.mark.parametrize("status", [500, 502, 503])
 async def test_upstream_five_hundred_settles_as_failed(status: int):
+    """5xx 必须**抛异常**而不是静默返回 []。
+
+    判据变更说明：这条用例原本断言 `results == []`。那正是 PRD P-1 的病根 ——
+    「上游挂了」和「这个话题真的没资料」在调用方眼里完全一样，
+    Agent 会带着"没有资料"的错误前提继续写报告。现在失败必须可见。
+    """
     quota = FakeQuota()
     provider = _provider(quota=quota, status=status)
 
-    results = await provider.search("q", 3)
+    with pytest.raises(SearchProviderError) as exc:
+        await provider.search("q", 3)
 
-    assert results == []
+    assert exc.value.error_kind == "upstream_5xx"
     assert len(quota.settled) == 1
     assert quota.settled[0]["failed"] is True
     assert quota.settled[0]["kind"] == "upstream_5xx"
@@ -260,7 +268,10 @@ async def test_timeout_is_settled_as_timeout():
         "test-key", quota=quota, client_factory=_transport(handler)
     )
 
-    assert await provider.search("q", 3) == []
+    with pytest.raises(SearchProviderError) as exc:
+        await provider.search("q", 3)
+
+    assert exc.value.error_kind == "timeout"
     assert quota.settled[0]["kind"] == "timeout"
 
 
@@ -273,13 +284,18 @@ async def test_transport_error_is_settled_as_network():
         "test-key", quota=quota, client_factory=_transport(handler)
     )
 
-    assert await provider.search("q", 3) == []
+    with pytest.raises(SearchProviderError) as exc:
+        await provider.search("q", 3)
+
+    assert exc.value.error_kind == "network"
     assert quota.settled[0]["kind"] == "network"
 
 
 async def test_unquoted_provider_without_quota_still_works():
     """配额单例为 None（DB 不可用 / 配额关闭）时，provider 照常工作，只是不记账。"""
-    provider = TavilySearchProvider("test-key", quota=None, client_factory=_transport(_ok_handler()))
+    provider = TavilySearchProvider(
+        "test-key", quota=None, client_factory=_transport(_ok_handler())
+    )
     results: Any = await provider.search("q", 2)
     assert len(results) == 1
 

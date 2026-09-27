@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { getSettings } from '../../api/graph'
+import { getRunBudget, getSettings } from '../../api/graph'
+import type { RunBudgetSnapshot } from '../../api/graph'
 import { fetchHealth } from '../../api/health'
-import { ApiClientError, apiBaseUrlForDisplay } from '../../api/client'
+import { ApiClientError, apiBaseUrlForDisplay, formatResetMoment } from '../../api/client'
 import type { HealthData } from '../../types/api'
 import { StatusBadge } from '../../components/StatusBadge'
 import { LoadingState } from '../../components/LoadingState'
 import { ErrorState } from '../../components/ErrorState'
+import { PageHeader } from '../../components/PageHeader'
+import { ModelPanel } from './ModelPanel'
 
 // 不再自己拼一份 `import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'`：
 // 那是同一份配置的第二个副本，线上同源部署时它会指向错误的 localhost。
@@ -30,8 +33,43 @@ interface ConfigGroup {
   rows: ConfigRow[]
 }
 
-/** 把后端配置按用途分为 7 组，避免 20 行挤在一起（P1-5） */
-function buildGroups(config: Record<string, unknown>): ConfigGroup[] {
+/**
+ * 「今日已用」的展示：进度条 + 数字。
+ *
+ * 为什么用进度条而不是纯文案：额度本质上是一个「剩余量」，
+ * 条形比「还剩 N 次」更快被扫读；文案同步保留，照顾读屏与精确值。
+ * 额度未启用 / 接口不可用（null）时回落成 '-'。
+ */
+function budgetBar(budget: RunBudgetSnapshot | null): ReactNode {
+  if (!budget?.enabled) return '-'
+  const ratio = budget.limit > 0 ? Math.min(1, budget.used / budget.limit) : 0
+  const exhausted = budget.remaining <= 0
+  return (
+    <span className="quota">
+      <span
+        className="quota__track"
+        role="img"
+        aria-label={`今日已用 ${budget.used} / ${budget.limit} 次`}
+      >
+        <span
+          className={`quota__fill${exhausted ? ' quota__fill--empty' : ''}`}
+          style={{ width: `${Math.round(ratio * 100)}%` }}
+        />
+      </span>
+      <span className="quota__text">
+        {exhausted
+          ? `${budget.used}/${budget.limit} 次（已用完）`
+          : `${budget.used}/${budget.limit} 次`}
+      </span>
+    </span>
+  )
+}
+
+/** 把后端配置按用途分为 8 组，避免 20 行挤在一起（P1-5） */
+function buildGroups(
+  config: Record<string, unknown>,
+  budget: RunBudgetSnapshot | null,
+): ConfigGroup[] {
   return [
     {
       title: '应用',
@@ -83,6 +121,31 @@ function buildGroups(config: Record<string, unknown>): ConfigGroup[] {
       ],
     },
     {
+      title: '访问与额度',
+      rows: [
+        {
+          label: '访问限流',
+          value: config.rate_limit_enabled
+            ? `开启（每 IP ${String(config.rate_limit_requests_per_minute ?? '-')} 次/分钟）`
+            : '关闭',
+        },
+        {
+          label: '每日深度研究额度',
+          value: config.daily_run_budget_enabled
+            ? `每位访客 ${String(config.daily_run_budget_per_ip ?? '-')} 次/天`
+            : '未开启',
+        },
+        { label: '今日已用（本机）', value: budgetBar(budget) },
+        {
+          label: '额度恢复',
+          value:
+            budget?.enabled && budget.reset_at_ms > 0
+              ? formatResetMoment(budget.reset_at_ms)
+              : '-',
+        },
+      ],
+    },
+    {
       title: '安全（CORS）',
       rows: [
         { label: 'CORS 来源', value: (config.cors_origins as string[] | undefined)?.join(', ') ?? '-' },
@@ -93,10 +156,12 @@ function buildGroups(config: Record<string, unknown>): ConfigGroup[] {
 
 /**
  * 系统设置：顶部「系统连接」分组承接原概览页的技术明细（环境/版本/延迟/UTC + 重新检测 + 排查提示），
- * 下方按用途分 7 组展示后端运行配置。
+ * 下方按用途分 8 组展示后端运行配置。
  */
 export function Settings() {
   const [config, setConfig] = useState<Record<string, unknown> | null>(null)
+  /** 今日额度快照：接口不可用时为 null，仅「访问与额度」组显示 '-' */
+  const [budget, setBudget] = useState<RunBudgetSnapshot | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [health, setHealth] = useState<HealthState>({ status: 'loading' })
@@ -130,6 +195,8 @@ export function Settings() {
     setError(null)
     try {
       setConfig(await getSettings())
+      // 今日额度单独拉取：接口不可用时只影响这一组的显示，不阻塞配置展示
+      setBudget(await getRunBudget().catch(() => null))
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : '加载失败')
     } finally {
@@ -145,19 +212,21 @@ export function Settings() {
     void checkHealth()
   }, [checkHealth])
 
-  const groups = config ? buildGroups(config) : []
+  const groups = config ? buildGroups(config, budget) : []
 
   return (
     <section className="panel">
-      <header className="panel__header">
-        <div>
-          <p className="eyebrow">系统设置</p>
-          <h2 className="panel__title">运行配置与连接</h2>
-          <p className="panel__subtitle">
-            后端连接自检、运行参数与依赖状态。敏感字段仅显示是否配置，不会暴露明文。
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="系统设置"
+        title="运行配置与连接"
+        lede="后端连接自检、模型与搜索配置、运行参数与依赖状态。敏感字段仅显示是否配置，不会暴露明文。"
+        notes={[
+          { term: '能做什么', desc: '确认「现在连的是谁、用的是哪个模型、额度还剩多少」。' },
+          { term: '怎么用', desc: '先看模型自检结果，再看「访问与额度」，其余为只读的运行参数。' },
+          { term: '注意', desc: '改配置要改后端 .env 并重启，页面上不能直接写。' },
+        ]}
+      />
+      <ModelPanel />
 
       {error && <ErrorState message={error} onRetry={() => void loadConfig()} />}
 

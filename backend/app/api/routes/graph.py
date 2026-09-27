@@ -10,6 +10,8 @@ from app.core.responses import ApiResponse, success_response
 from app.events.sse import event_stream
 from app.graph.service import (
     TERMINAL_STATUSES,
+    clear_runs,
+    delete_run,
     get_research,
     list_runs,
     resume_research,
@@ -95,6 +97,60 @@ async def list_research_runs(
     limit: int = Query(default=50, ge=1, le=500, description="最多返回几条"),
 ) -> ApiResponse[list[dict]]:
     return success_response(list_runs(limit=limit, status=status))
+
+
+@router.delete(
+    "/runs/{thread_id}",
+    response_model=ApiResponse[dict],
+    summary="删除一条历史运行（含其事件）",
+)
+async def delete_research_run(thread_id: str) -> ApiResponse[dict]:
+    if not delete_run(thread_id):
+        raise AppError(
+            code=ErrorCode.NOT_FOUND,
+            message=f"找不到这条运行记录：{thread_id}",
+            status_code=404,
+        )
+    return success_response({"deleted": True, "thread_id": thread_id})
+
+
+@router.delete(
+    "/runs",
+    response_model=ApiResponse[dict],
+    summary="清空全部历史运行（含事件）",
+)
+async def clear_research_runs() -> ApiResponse[dict]:
+    return success_response(clear_runs())
+
+
+@router.get(
+    "/runs/{thread_id}/events",
+    response_model=ApiResponse[dict],
+    summary="按 id 拉取一次运行的事件（SSE 不可用时的轮询通道）",
+)
+async def list_research_events(
+    thread_id: str,
+    after: int = Query(default=0, ge=0, description="只返回 id 大于该值的事件"),
+) -> ApiResponse[dict]:
+    """[B37] 轮询版事件接口。
+
+    存在的理由：部分反向代理（含当前云端网关）会把 `text/event-stream` 的
+    整条响应缓冲住（连响应头都不下发），浏览器 EventSource 会永远停在
+    CONNECTING，前端只能靠用户手动刷新。SSE 仍然保留（本地/直连时更低延迟），
+    但前端必须有这条可用的替代通道，否则「进度自动更新」在云上根本不成立。
+
+    快照接口（GET /graph/research/{id}）提供步骤，这个接口提供事件，
+    两者都是普通 JSON 响应，不会被任何网关缓冲。
+    """
+    from app.events.store import get_event_store  # noqa: PLC0415  # 避免模块级循环依赖
+
+    events = get_event_store().list_since(thread_id, after_id=after)
+    return success_response(
+        {
+            "events": events,
+            "last_id": events[-1]["id"] if events else after,
+        }
+    )
 
 
 @router.get("/research/{thread_id}/events", summary="订阅一次运行的事件流（SSE）")

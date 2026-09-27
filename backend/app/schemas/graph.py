@@ -38,6 +38,10 @@ class ResearchRunResponse(BaseModel):
     steps: list[dict] = []
     tool_calls: list[dict] = []
     citations: list[dict] = []
+    # 供 UI 展示的「依据来源」（由后端 app/graph/sources.py 解析产出，前端只渲染）。
+    # 每条：{origin: 'web'|'knowledge', title, url, snippet, source}
+    # ⚠️ 这个字段**永远存在**（没有来源时是 []），否则前端要写两套分支。
+    sources: list[dict] = []
     evidence_count: int = 0
     iteration: int = 0
     verify_attempts: int = 0

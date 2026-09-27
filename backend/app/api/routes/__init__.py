@@ -8,9 +8,11 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.routes.agent import router as agent_router
+from app.api.routes.debug import router as debug_router
 from app.api.routes.graph import router as graph_router
 from app.api.routes.health import router as health_router
 from app.api.routes.knowledge import router as knowledge_router
+from app.api.routes.llm import router as llm_router
 from app.api.routes.research import router as research_router
 from app.api.routes.settings import router as settings_router
 
@@ -21,3 +23,5 @@ api_router.include_router(agent_router)
 api_router.include_router(knowledge_router)
 api_router.include_router(graph_router)
 api_router.include_router(settings_router)
+api_router.include_router(llm_router)
+api_router.include_router(debug_router)

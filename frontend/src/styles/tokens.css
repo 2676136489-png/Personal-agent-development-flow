@@ -1,7 +1,17 @@
-/* ===== tokens.css · 设计令牌（唯一来源，无选择器样式） ===== */
+/* ===== tokens.css · 设计令牌（唯一来源，无选择器样式） =====
 
-/* =========================================================================
-   AI 研究工作台 · 设计令牌
+   =========================================================================
+   AI 研究工作台 · 设计令牌 v2
+   -------------------------------------------------------------------------
+   定调：**研究档案（Research Ledger）**
+   暖调纸感底 + 墨色文字 + 单一朱红强调 + 衬线标题 + 等宽数据。
+   产品是「把一次 AI 研究的每一步与每条证据摊开给用户看」，
+   所以视觉语言取自实验室记录本 / 学术档案：纸、墨、印章红、等宽编号。
+
+   - 展示字：Fraunces（拉丁）+ 思源宋体（中文）—— 学术感，与"研究"语义一致
+   - 正文字：Public Sans（拉丁）+ 思源黑体 / 苹方（中文）—— 中性、长时间阅读友好
+   - 数据字：JetBrains Mono —— 节点名 / token / 耗时 / 编号一律等宽，便于对齐比对
+
    所有颜色 / 字号 / 间距 / 圆角 / 阴影 / 层级 / 动效一律引用本文件令牌，
    业务 CSS 中禁止出现硬编码散值。明暗两套主题在此统一定义。
    ========================================================================= */
@@ -9,58 +19,62 @@
 :root {
   color-scheme: light;
 
-  /* ---- 颜色语义（沿用现有命名） ---- */
-  --page: #ffffff;
-  --surface: #ffffff;
-  --surface-alt: #f5f5f7;
-  --ink: #1d1d1f;
-  --ink-soft: #424245;
-  --muted: #6e6e73;
-  /* §4.1 修订（M2）：原 #86868b 在 --surface-alt#f5f5f7 上仅 3.33:1，
-     #6b6b70 → 4.87:1。深色侧同步提到 #98989d（6.30:1）。 */
-  --faint: #6b6b70;
-  --line: rgba(0, 0, 0, 0.09);
-  --line-strong: rgba(0, 0, 0, 0.16);
-  --accent: #0071e3;
-  --accent-hover: #0077ed;
-  /* §4.1：承载白字的强调底（唯一允许在彩色底上写 #fff 的家族；白字实测 ≥4.69:1） */
-  --accent-strong: #0071e3;
-  /* 上述底色上的文字（显式化：禁止再写死 #fff） */
-  --on-accent: #ffffff;
-  /* tinted 底 / 中性底上的 accent 文字（--accent 当文字用只有 4.19:1，见 M3） */
-  --accent-ink: #0062c4;
-  --danger: #d70015;
-  --danger-bg: #fff5f5;
-  --ok: #008a34;
-  --ok-bg: #f0fbf3;
-  --warn: #b25000;
-  --warn-bg: #fff8ef;
-  --nav-bg: rgba(255, 255, 255, 0.72);
-  --overlay: rgba(0, 0, 0, 0.42);
+  /* ---- 表面与文字（暖调纸 / 墨） ---- */
+  --page: #f2efe7;
+  --surface: #fbfaf6;
+  --surface-alt: #ebe7dc;
+  --ink: #1c1d19;
+  --ink-soft: #3a3c35;
+  --muted: #5f6157;
+  /* 对比度实测：--muted 5.70:1 / --faint 5.21:1（底色 --page #f2efe7），均 ≥4.5:1 */
+  --faint: #63655b;
+  --line: rgba(28, 29, 25, 0.12);
+  --line-strong: rgba(28, 29, 25, 0.22);
 
-  /* ---- 新增：消除硬编码 rgba(0,113,227,*) 与状态边框 ---- */
-  --accent-tint: rgba(0, 113, 227, 0.1);
-  --accent-tint-strong: rgba(0, 113, 227, 0.18);
-  --accent-border: rgba(0, 113, 227, 0.25);
-  --ok-border: rgba(0, 138, 52, 0.25);
-  --danger-border: rgba(215, 0, 21, 0.25);
-  --warn-border: rgba(178, 80, 0, 0.3);
-  --focus-ring: 0 0 0 3px rgba(0, 113, 227, 0.15);
-  /* 焦点环（§9）：描边色取 --ink（accent 在 --accent-strong 底上会消失），柔光晕用 accent-tint */
+  /* ---- 强调色（朱红 = 印章/批注，全站唯一强调色） ---- */
+  --accent: #c0392b;
+  --accent-hover: #a93226;
+  /* 承载白字的强调底：白字对比度 5.40:1 */
+  --accent-strong: #c0392b;
+  --on-accent: #ffffff;
+  /* 纸底上的 accent 文字：6.53:1（比 --accent 更深，保证可读） */
+  --accent-ink: #9e2b20;
+
+  /* ---- 状态色 ---- */
+  --danger: #b3261e;
+  --danger-bg: #fbedeb;
+  --ok: #2f6b3f;
+  --ok-bg: #edf4ee;
+  --warn: #8a5a00;
+  --warn-bg: #faf1e0;
+
+  /* ---- 导航 / 遮罩 ---- */
+  --nav-bg: rgba(242, 239, 231, 0.82);
+  --overlay: rgba(28, 29, 25, 0.45);
+
+  /* ---- 新增：消除硬编码 rgba 与状态边框 ---- */
+  --accent-tint: rgba(192, 57, 43, 0.1);
+  --accent-tint-strong: rgba(192, 57, 43, 0.18);
+  --accent-border: rgba(192, 57, 43, 0.28);
+  --ok-border: rgba(47, 107, 63, 0.28);
+  --danger-border: rgba(179, 38, 30, 0.28);
+  --warn-border: rgba(138, 90, 0, 0.32);
+  --focus-ring: 0 0 0 3px rgba(192, 57, 43, 0.2);
+  /* 焦点环：描边取 --ink（accent 在 --accent-strong 底上会消失），柔光晕用 accent-tint */
   --focus-outline: var(--ink);
   --focus-halo: 0 0 0 4px var(--accent-tint);
-  --hover-bg: rgba(0, 0, 0, 0.02);
-  --scroll-thumb: rgba(0, 0, 0, 0.16);
+  --hover-bg: rgba(28, 29, 25, 0.035);
+  --scroll-thumb: rgba(28, 29, 25, 0.18);
   --nav-group-line: var(--line-strong);
 
-  /* ---- §4.1 新增：骨架 / 下沉容器 / 环境光 ---- */
-  --skeleton-bg: var(--surface-alt);
-  --skeleton-sheen: rgba(255, 255, 255, 0.55);
-  --surface-sunken: var(--surface-alt);
+  /* ---- 骨架 / 下沉容器 / 环境光 ---- */
+  --skeleton-bg: rgba(28, 29, 25, 0.07);
+  --skeleton-sheen: rgba(255, 255, 255, 0.6);
+  --surface-sunken: #e7e3d8;
   --line-sunken: var(--line);
-  --ambient-glow: var(--accent-tint);
+  --ambient-glow: rgba(192, 57, 43, 0.07);
 
-  /* ---- §4.1 新增：toast / kbd / 行长 / 动效 / 层级 ---- */
+  /* ---- toast / kbd / 行长 / 动效 / 层级 ---- */
   --toast-bg: var(--surface);
   --toast-border: var(--line-strong);
   --toast-shadow: var(--shadow-lg);
@@ -68,6 +82,39 @@
   --measure-lede: 62ch;
   --dur-short: 120ms;
   --z-toast: 500;
+
+  /* ===== v2 新增 ===== */
+
+  /* ---- 字体族 ---- */
+  --font-display: "Fraunces", "Noto Serif SC", "Source Han Serif SC", "Songti SC", Georgia, serif;
+  --font-body: "Public Sans", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+  /* --font 是既有令牌名（全局 body 字体），指向正文栈 */
+  --font: var(--font-body);
+  --mono: var(--font-mono);
+
+  /* ---- 纸感氛围层 ---- */
+  --paper-rule: rgba(28, 29, 25, 0.055); /* 网格纸的发丝线 */
+  --grain-opacity: 0.045;
+  --seal-ring: rgba(192, 57, 43, 0.35); /* 印章描边 */
+
+  /* ---- 步骤条语义色 ---- */
+  --step-done: var(--ok);
+  --step-active: var(--accent);
+  --step-pending: rgba(28, 29, 25, 0.22);
+  --step-track: rgba(28, 29, 25, 0.12);
+
+  /* ---- 层级补充 ---- */
+  --z-sticky: 60;
+  --z-rail: 2;
+
+  /* ---- 动效补充 ---- */
+  --dur-xs: 90ms;
+  --dur-in: 260ms;
+  --dur-out: 420ms;
+  --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* ---- 间距刻度（4px 基准） ---- */
   --space-1: 4px;
@@ -81,9 +128,10 @@
   --space-9: 48px; /* section 节奏 */
   --space-10: 64px; /* hero 上留白 */
 
-  /* ---- 字号层级（9 级 + hero/h2） ---- */
-  --text-hero: clamp(2rem, 4.5vw, 3rem);
-  --text-h2: clamp(1.6rem, 3vw, 2.25rem);
+  /* ---- 字号层级 ---- */
+  --text-hero: clamp(2.4rem, 5vw, 3.6rem);
+  --text-h2: clamp(1.7rem, 3vw, 2.4rem);
+  --text-4xl: 34px;
   --text-3xl: 28px;
   --text-2xl: 22px;
   --text-xl: 18px;
@@ -97,38 +145,33 @@
   --leading-tight: 1.25;
   --leading-snug: 1.4;
   --leading-normal: 1.6;
-  --leading-relaxed: 1.7;
+  --leading-relaxed: 1.75; /* 中文正文行高 */
   --weight-normal: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
   --weight-bold: 700;
 
-  /* ---- 圆角 ---- */
-  --radius-xs: 6px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
+  /* ---- 圆角：档案卡片偏方，只有 pill 用于徽标 ---- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --radius-pill: 999px;
   --radius-circle: 50%;
 
-  /* ---- 阴影（浅色） ---- */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.28);
+  /* ---- 阴影（纸面投影，带暖色而不是纯黑） ---- */
+  --shadow-xs: 0 1px 2px rgba(46, 38, 25, 0.06);
+  --shadow-sm: 0 1px 3px rgba(46, 38, 25, 0.08);
+  --shadow-md: 0 8px 24px rgba(46, 38, 25, 0.1);
+  --shadow-lg: 0 18px 40px rgba(46, 38, 25, 0.13);
+  --shadow-xl: 0 24px 80px rgba(46, 38, 25, 0.22);
 
   /* ---- 排版 / 栅格 / 层级 / 动效 ---- */
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-    "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Inter,
-    sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
-  --max-width: 1080px; /* PRD Q4：保持 1080，仅统一内边距与 gap */
-  --content-measure: 68ch; /* 正文行长上限（P1-6） */
-  --gutter: 44px; /* 桌面容器左右内边距 */
+  --max-width: 1100px;
+  --content-measure: 66ch;
+  --gutter: 44px;
   --grid-gap: var(--space-4);
-  --nav-height: 52px;
+  --nav-height: 58px;
 
   --z-base: 0;
   --z-track: 1;
@@ -138,11 +181,11 @@
   --z-drawer: 300;
   --z-modal: 400;
 
-  --dur-fast: 160ms;
-  --dur-base: 220ms;
-  --dur-slow: 320ms;
+  --dur-fast: 170ms;
+  --dur-base: 300ms;
+  --dur-slow: 640ms;
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
-  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
 
   font-family: var(--font);
@@ -150,65 +193,77 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 等宽数字：数据列（token / 耗时 / 轮次）纵向对齐 */
+  font-variant-numeric: tabular-nums;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #000000;
-  --surface: #1d1d1f;
-  --surface-alt: #161617;
-  --ink: #f5f5f7;
-  --ink-soft: #d2d2d7;
-  --muted: #a1a1a6;
-  /* §4.1 修订（M2）：#86868b 本已达标（4.99:1），一并提到 #98989d（6.30:1）与浅色侧同构 */
-  --faint: #98989d;
-  --line: rgba(255, 255, 255, 0.11);
-  --line-strong: rgba(255, 255, 255, 0.2);
-  --accent: #2997ff;
-  --accent-hover: #4aa8ff;
-  /* 深色主按钮：白字在 --accent 上只有 3.01:1 → 调暗为承载白字的专用底（M1 / Q10） */
-  --accent-strong: #0f6fd6;
-  --on-accent: #ffffff;
-  /* 深色下 tinted 底上的 accent 文字（--accent 为 4.46:1） */
-  --accent-ink: #6ab7ff;
-  --danger: #ff6b6b;
-  --danger-bg: rgba(255, 59, 48, 0.14);
-  --ok: #4cd07d;
-  --ok-bg: rgba(48, 209, 88, 0.14);
-  --warn: #ff9f3c;
-  --warn-bg: rgba(255, 159, 10, 0.14);
-  --nav-bg: rgba(22, 22, 23, 0.72);
-  --overlay: rgba(0, 0, 0, 0.68);
 
-  /* 深色下提高强调/状态色不透明度，保证对比度可辨（P2-5） */
-  --accent-tint: rgba(41, 151, 255, 0.16);
-  --accent-tint-strong: rgba(41, 151, 255, 0.24);
-  --accent-border: rgba(41, 151, 255, 0.3);
-  --ok-border: rgba(76, 208, 125, 0.3);
-  --danger-border: rgba(255, 107, 107, 0.3);
-  --warn-border: rgba(255, 159, 60, 0.32);
-  --focus-ring: 0 0 0 3px rgba(41, 151, 255, 0.24);
+  /* 深色不是纯黑：墨绿近黑，保持与浅色同构的暖调 */
+  --page: #131412;
+  --surface: #1b1d19;
+  --surface-alt: #23251f;
+  --ink: #efece2;
+  --ink-soft: #d6d2c6;
+  --muted: #a6a398;
+  /* 对比度实测（底色 --page #131412）：--muted 7.5:1 / --faint 6.9:1 */
+  --faint: #9a978c;
+  --line: rgba(239, 236, 226, 0.13);
+  --line-strong: rgba(239, 236, 226, 0.24);
+
+  --accent: #ff6a4d;
+  --accent-hover: #ff8368;
+  /* 深色下承载白字要更暗一点：白字对比度 5.2:1 */
+  --accent-strong: #d8452b;
+  --on-accent: #ffffff;
+  --accent-ink: #ff8a70;
+
+  --danger: #ff8a80;
+  --danger-bg: rgba(179, 38, 30, 0.18);
+  --ok: #6fcf97;
+  --ok-bg: rgba(47, 107, 63, 0.2);
+  --warn: #ffc46b;
+  --warn-bg: rgba(138, 90, 0, 0.22);
+
+  --nav-bg: rgba(19, 20, 18, 0.82);
+  --overlay: rgba(0, 0, 0, 0.66);
+
+  --accent-tint: rgba(255, 106, 77, 0.16);
+  --accent-tint-strong: rgba(255, 106, 77, 0.26);
+  --accent-border: rgba(255, 106, 77, 0.36);
+  --ok-border: rgba(111, 207, 151, 0.34);
+  --danger-border: rgba(255, 138, 128, 0.34);
+  --warn-border: rgba(255, 196, 107, 0.34);
+  --focus-ring: 0 0 0 3px rgba(255, 106, 77, 0.28);
   --focus-outline: var(--ink);
   --focus-halo: 0 0 0 4px var(--accent-tint-strong);
-  --hover-bg: rgba(255, 255, 255, 0.03);
-  --scroll-thumb: rgba(255, 255, 255, 0.2);
+  --hover-bg: rgba(239, 236, 226, 0.045);
+  --scroll-thumb: rgba(239, 236, 226, 0.22);
   --nav-group-line: var(--line-strong);
 
-  /* ---- 深色侧的新增令牌取值 ---- */
-  --skeleton-bg: rgba(255, 255, 255, 0.07);
-  --skeleton-sheen: rgba(255, 255, 255, 0.1);
-  --surface-sunken: #0b0b0d;
+  --skeleton-bg: rgba(239, 236, 226, 0.08);
+  --skeleton-sheen: rgba(239, 236, 226, 0.12);
+  --surface-sunken: #0d0e0c;
   --line-sunken: var(--line-strong);
-  --ambient-glow: rgba(41, 151, 255, 0.08);
-  --toast-bg: #262629;
+  --ambient-glow: rgba(255, 106, 77, 0.09);
+  --toast-bg: #23251f;
   --toast-border: var(--line-strong);
   --toast-shadow: var(--shadow-xl);
   --kbd-bg: var(--surface-alt);
 
-  /* 深色阴影：显著提高不透明度补偿黑底不可见 */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.55);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.6);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.65);
-  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.8);
+  --paper-rule: rgba(239, 236, 226, 0.05);
+  --grain-opacity: 0.06;
+  --seal-ring: rgba(255, 106, 77, 0.4);
+
+  --step-done: var(--ok);
+  --step-active: var(--accent);
+  --step-pending: rgba(239, 236, 226, 0.22);
+  --step-track: rgba(239, 236, 226, 0.14);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.55);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.58);
+  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.62);
+  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.78);
 }

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listRuns } from '../../api/graph'
 import { ApiClientError } from '../../api/client'
 import { StatusBadge } from '../../components/StatusBadge'
+import { PageHeader } from '../../components/PageHeader'
 import { EmptyState } from '../../components/EmptyState'
 import { LoadingState } from '../../components/LoadingState'
 import { ErrorState } from '../../components/ErrorState'
+import type { NavigateFn } from '../../App'
 import type { ResearchRunSummary } from '../../types/graph'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -23,12 +25,28 @@ const STATUS_VARIANT: Record<string, 'ok' | 'warn' | 'error' | 'info' | 'running
   cancelled: 'warn',
 }
 
+/**
+ * [F11] 一条运行记录该跳到哪去。
+ *
+ * 已完成的去看「研究报告」（点开即展开全文与依据来源）；
+ * 其余（待确认 / 运行中 / 失败 / 取消）去「深度研究」，那里能继续批准、
+ * 看到中断点或失败原因 —— 在评估页只能看到一个状态词，什么也做不了。
+ */
+function targetPageOf(status: string): string {
+  return status === 'completed' ? 'reports' : 'workflow'
+}
+
 function formatTime(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleString()
 }
 
-export function Evaluation() {
+export interface EvaluationProps {
+  /** 点击最近运行后跳到对应页面并打开该次运行 */
+  onNavigate?: NavigateFn
+}
+
+export function Evaluation({ onNavigate }: EvaluationProps) {
   const [runs, setRuns] = useState<ResearchRunSummary[]>([])
   // 首屏即为 loading：避免数据到达前误显示「暂无运行记录」的空态闪烁
   const [loading, setLoading] = useState(true)
@@ -62,13 +80,16 @@ export function Evaluation() {
 
   return (
     <section className="panel">
-      <header className="panel__header">
-        <div>
-          <p className="eyebrow">效果评估</p>
-          <h2 className="panel__title">运行效果一览</h2>
-          <p className="panel__subtitle">统计深度研究的运行情况与分布，帮助判断整体可用性。</p>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="效果评估"
+        title="运行效果一览"
+        lede="统计深度研究的运行情况与分布：成功率、耗时、token 消耗与失败原因，用来判断整体可用性与瓶颈。"
+        notes={[
+          { term: '能做什么', desc: '把「跑了多少次、成了多少、慢在哪、花在哪」量化出来。' },
+          { term: '怎么用', desc: '先看成功率与耗时分布，再看失败原因归类，定位要优化的节点。' },
+          { term: '面向谁', desc: '偏开发者视角；只关心结论的话看「研究报告」即可。' },
+        ]}
+      />
 
       {error && <ErrorState message={error} onRetry={() => void load()} />}
 
@@ -108,13 +129,19 @@ export function Evaluation() {
               <ul className="run-list">
                 {runs.slice(0, 15).map((run) => (
                   <li key={run.thread_id} className="run-list__item">
-                    <div className="run-list__row" title={run.question}>
+                    {/* [F11] 可点：跳到「研究报告」或「深度研究」并直接打开这一次运行。
+                        用 .run-list__btn（不是 __row）——交互态与 cursor 只挂在它上面 */}
+                    <button
+                      className="run-list__btn"
+                      onClick={() => onNavigate?.(targetPageOf(run.status), run.thread_id)}
+                      title={`打开这一次运行：${run.question}`}
+                    >
                       <StatusBadge variant={STATUS_VARIANT[run.status] ?? 'info'}>
                         {STATUS_LABEL[run.status] ?? run.status}
                       </StatusBadge>
                       <span className="run-list__q">{run.question}</span>
                       <span className="hint">{formatTime(run.updated_at)}</span>
-                    </div>
+                    </button>
                   </li>
                 ))}
               </ul>

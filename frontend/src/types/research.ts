@@ -27,4 +27,19 @@ export interface PlanResponse {
   mock: boolean
   usage: TokenUsage
   latency_ms: number
+  /** 落库后的记录 id（历史规划列表用）；落库失败时为空 */
+  plan_id?: string | null
+}
+
+/** 历史规划记录（GET /api/research/plans 的条目） */
+export interface PlanRecord {
+  id: string
+  question: string
+  plan: ResearchPlan
+  model: string
+  provider: string
+  mock: boolean
+  usage: TokenUsage
+  latency_ms: number
+  created_at: string
 }

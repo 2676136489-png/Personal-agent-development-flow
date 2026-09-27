@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ----------------------------- 通用工具函数 -----------------------------
 
@@ -158,3 +158,25 @@ class ResearchReport(BaseModel):
     @classmethod
     def _normalize_limitations(cls, value: object) -> list[str]:
         return _coerce_str_list(value)
+
+    @model_validator(mode="after")
+    def _report_must_have_substance(self) -> ResearchReport:
+        """[B21] 空报告直接判为不合规，交给上层的 repair 重试。
+
+        GLM-4-Flash 在 prompt 没有硬性篇幅要求时，经常产出
+        「一句话 summary + 空 sections」的 skeleton 报告 —— 校验能过，
+        但用户看到的就是"报告怎么这么短"。这里把它变成校验失败，
+        complete_structured 的 repair 循环会把具体原因回灌给模型重来一次。
+        """
+        total = len(self.summary) + sum(len(section.content) for section in self.sections)
+        if not self.sections and len(self.summary) < 100:
+            raise ValueError(
+                "报告内容过少：sections 为空且 summary 过短。"
+                "请输出 3~6 个小节，每节不少于 200 字，summary 不少于 150 字。"
+            )
+        if total < 300:
+            raise ValueError(
+                f"报告内容过少（全文约 {total} 字）：请把每个小节展开到 200 字以上，"
+                "结合证据编号 [证据N] 展开叙述。"
+            )
+        return self

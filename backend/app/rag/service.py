@@ -167,6 +167,14 @@ class KnowledgeService:
     def list_chunks(self, document_id: str) -> list[DocumentChunk]:
         return self._store.list_chunks(document_id)
 
+    def delete_document(self, document_id: str) -> bool:
+        """删除一份文档：删 chunk + 文档记录，并让向量索引失效重建。"""
+        deleted = self._store.delete_document(document_id)
+        if deleted:
+            # 版本号 +1 → 下次检索时 _ensure_index 会按新版本重建索引
+            self._version += 1
+        return deleted
+
 
 _SERVICE: KnowledgeService | None = None
 
@@ -180,3 +188,41 @@ def get_knowledge_service() -> KnowledgeService:
             settings=get_settings(),
         )
     return _SERVICE
+
+
+# ---------------------------------------------------------------- 预置示例文档
+
+_SEED_DIR = Path(__file__).parent / "seed_docs"
+
+
+async def seed_knowledge_base_if_empty() -> None:
+    """[B29] 补齐预置示例文档（启动钩子调用，后台执行不阻塞服务）。
+
+    用户反馈「知识库你自己再丰富一些」—— 空库让「先查知识库再联网」的
+    检索策略形同虚设，新用户也看不到知识库能干什么。
+    预置 4 份与产品示例问题配套的中文文档，让首次体验就有可检索的内容。
+
+    ⚠️ 判据是「缺哪份补哪份」而不是「库为空才导入」：
+    已有知识库（哪怕只有用户传的测试文档）常常更需要示例内容，
+    按文件名精确补齐才不会让这个功能在非空库里永久失效。
+
+    幂等：已存在同名 [示例] 文档的会跳过；单篇失败只记日志，不影响其余。
+    """
+    if not _SEED_DIR.is_dir():
+        return
+    service = get_knowledge_service()
+    existing = {doc.filename for doc in service.list_documents()}
+
+    for path in sorted(_SEED_DIR.glob("*.md")):
+        filename = f"[示例] {path.name}"
+        if filename in existing:
+            continue
+        try:
+            await service.ingest(
+                data=path.read_bytes(),
+                filename=filename,
+                content_type="text/markdown",
+            )
+            logger.info("seed document ingested: %s", path.name)
+        except Exception:  # noqa: BLE001 - 单篇失败不阻塞启动
+            logger.warning("seed document failed: %s", path.name, exc_info=True)

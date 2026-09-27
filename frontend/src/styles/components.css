@@ -333,8 +333,130 @@
   padding: 0;
 }
 
+/* [B28] 报告标题 + 下载按钮横排 */
+.report-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3, 12px);
+}
+
+.report-panel__head .report-panel__title,
+.report-panel__head .report__title {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+}
+
+/* [B28] 「下载报告」组合按钮：主按钮 + 格式下拉 */
+.download-report {
+  position: relative;
+  display: inline-flex;
+}
+
+.download-report__main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.download-report__toggle {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid rgb(255 255 255 / 0.25);
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.download-report__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+}
+
+.download-report__item {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.download-report__item:hover {
+  background: var(--surface-alt);
+}
+
+.download-report__item-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.download-report__item-desc {
+  font-size: var(--text-xs, 12px);
+  color: var(--muted);
+}
+
 .link-button:hover {
   text-decoration: underline;
+}
+
+/* [B26] 危险操作（清空历史）二次确认态 */
+.link-button--danger {
+  color: var(--danger, #d64545);
+  font-weight: 600;
+}
+
+/* [B26] 历史记录条目的删除按钮：默认低调，悬停条目时显现 */
+.run-list__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.run-list__item .run-list__btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.run-list__delete {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.run-list__item:hover .run-list__delete,
+.run-list__delete:focus-visible {
+  opacity: 1;
+}
+
+.run-list__delete:hover {
+  color: var(--danger, #d64545);
+  background: var(--surface-sunken);
 }
 
 input[type="range"] {
@@ -482,6 +604,14 @@ input[type="range"] {
 .run-list__btn:hover {
   border-color: var(--accent);
   background: var(--surface-alt);
+}
+
+/* [B39] 当前正在回看的那条记录：要比 hover 更"定住"，否则鼠标一移开就认不出
+   哪一条是当前打开的。左侧嵌一条强调色，和 hover 的整块变色区分开。 */
+.run-list__btn[data-active] {
+  border-color: var(--accent);
+  background: var(--surface-alt);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .run-list__q {
@@ -1728,3 +1858,14 @@ input[type="range"] {
 
 /* 组合类：右对齐的元信息行 */
 .run-card__meta--end { justify-content: flex-end; }
+
+/* [B22] 「拿去跑深度研究」行动区：按钮 + 说明横排，窄屏换行 */
+.run-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px dashed var(--line);
+}

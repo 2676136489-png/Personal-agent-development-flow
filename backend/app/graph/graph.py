@@ -127,9 +127,15 @@ def get_research_graph():
 def build_initial_state(
     *,
     question: str,
-    max_iterations: int = 3,
+    max_iterations: int = 5,
     max_verify_attempts: int = 2,
 ) -> ResearchState:
+    """构造图的初始状态。
+
+    默认值只服务「直接调用」的场景（测试 / 脚本）；正式运行由
+    `service.start_research` 显式传入 `Settings.graph_max_iterations`，
+    config.py 的默认值与此处保持一致（5 = 覆盖多子问题所需的轮数下限）。
+    """
     return ResearchState(
         question=question,
         max_iterations=max_iterations,

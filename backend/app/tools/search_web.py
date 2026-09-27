@@ -27,6 +27,10 @@ class SearchWebTool(BaseTool):
     )
     args_schema = SearchWebArgs
     timeout_seconds = 25.0
+    # 计费工具不参与工具层自动重试：Tavily 超时/网络失败时预扣**不退款**
+    # （保守口径，见 search_provider.py），重试会再预扣一笔 → 一次逻辑搜索重复扣积分。
+    # 瞬时失败的可恢复性由上层（research 节点）通过「重新决策 → 再检索」承担。
+    retryable = False
 
     async def _run(self, args: BaseModel, ctx: ToolContext) -> str:
         assert isinstance(args, SearchWebArgs)

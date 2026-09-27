@@ -50,9 +50,7 @@ def _select_env_files() -> tuple[Path, ...]:
     # 沙箱会注入 PORT；本地开发不会。用它区分部署与本地，最可靠。
     is_deployed = "PORT" in os.environ
     candidates = (
-        (_BACKEND_ROOT / ".env.production",)
-        if is_deployed
-        else (_BACKEND_ROOT / ".env.local",)
+        (_BACKEND_ROOT / ".env.production",) if is_deployed else (_BACKEND_ROOT / ".env.local",)
     )
     return tuple(p for p in candidates if p.is_file())
 
@@ -84,8 +82,16 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
 
     # ----- LLM -----
-    # auto = 有 Key 走真实 API，没 Key 自动退化成离线 Mock（保证本地/CI 可跑）
-    llm_provider: str = "auto"
+    #
+    # 统一模型调用层（app/llm/client.py）支持的 provider：
+    #   ollama  = 本地 Ollama 原生 /api/chat（**默认**，模型 qwen3:8b）
+    #   openai  = 任何 OpenAI 兼容端点（DeepSeek / 通义 / Moonshot / 官方 OpenAI）
+    #   mock    = 离线假数据（本地开发 / CI）
+    #   auto    = 先试 Ollama，不可用时按 llm_fallback_provider 兜底，都没有则 Mock
+    #
+    # ⚠️ 切模型只改这一个值（+ 对应的一小组参数），业务代码零改动：
+    #    所有调用点拿到的都是 LLMClient 协议对象，不知道底下是谁。
+    llm_provider: Literal["auto", "ollama", "openai", "openai-compatible", "mock"] = "ollama"
     # 留空则用 SDK 默认（OpenAI）；换厂商只改这两个值：
     #   DeepSeek:  https://api.deepseek.com        + deepseek-flash
     #   通义千问:  https://dashscope.aliyuncs.com/compatible-mode/v1 + qwen-plus
@@ -96,7 +102,38 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     llm_max_attempts: int = 3
     llm_temperature: float = 0.2
-    llm_max_tokens: int = 2000
+    # 单次生成上限（token），OpenAI 兼容 provider 的默认预算。
+    # ⚠️ 不要低于 4096：GLM-4-Flash / qwen3 这类模型在长报告场景下，
+    # 2000 会在 JSON 中途被截断（finish_reason=length），表现为报告腰斩。
+    llm_max_tokens: int = 4096
+
+    # ----- LLM：本地 Ollama（主模型 qwen3:8b）-----
+    # Ollama 的原生地址（**不带 /v1**）：/api/chat 才能用到 keep_alive / think /
+    # num_ctx 这些 OpenAI 兼容层没有的本地推理参数。
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen3:8b"
+    # 模型常驻显存时长："5m" = 用完再留 5 分钟；"0" = 立即卸载（省内存，下次冷启动慢）
+    ollama_keep_alive: str = "5m"
+    # qwen3 是思考型模型：关掉思考能显著降低首字延迟与推理 token 开销。
+    # 需要模型自己推理的场景（数学 / 复杂规划）可置 true。
+    ollama_think: bool = False
+    # 上下文窗口（token）。8B 模型建议 8192 起；内存充裕可上调到 16384/32768。
+    ollama_num_ctx: int = 8192
+    # 单次生成上限（token），等价于 OpenAI 的 max_tokens。
+    # 思考型模型请把推理预算也算进去，4096 是 qwen3:8b 结构化的安全下限。
+    ollama_num_predict: int = 4096
+    # 本地 8B 模型首 token 就要几秒，超时必须远高于云端 API
+    ollama_timeout_seconds: float = 120.0
+    # 主 provider 不可用时的兜底（"" = 不兜底，直接把错误抛给调用方）。
+    # 线上环境没有 Ollama 时，配成 "openai" 即可无缝回落到云端模型。
+    llm_fallback_provider: Literal["", "ollama", "openai", "openai-compatible", "mock"] = ""
+    # 判定「主模型不可用」所需的连续失败次数。
+    llm_fallback_threshold: int = 2
+    # 判定降级后的冷却时长（秒）：冷却期内直连兜底，**不再**去试主模型。
+    # 没有它，线上每一次请求都要先空等一整段主模型超时（20s × 3 次重试 = 60s）。
+    llm_fallback_cooldown_seconds: float = 120.0
+    # 是否开放流式输出（/api/llm/stream）。本地模型建议开启以改善体感延迟。
+    llm_stream_enabled: bool = True
 
     # ----- Agent / Tools -----
     # 离线/真实搜索的选择：auto = 有 Tavily Key 走真实联网，没 Key 回退离线语料
@@ -161,8 +198,10 @@ class Settings(BaseSettings):
     events_db_path: str = "storage/events.db"
     # SSE 心跳间隔（秒）。必须小于常见代理的空闲超时（通常 60s）。
     sse_heartbeat_seconds: float = 15.0
-    # Research Graph 的默认循环上限
-    graph_max_iterations: int = 3
+    # Research Graph 的默认循环上限。
+    # 每轮 research = 一次「LLM 决策 + 一个工具调用」，深度研究需要覆盖
+    # 计划里的多个子问题，3 轮往往只够搜一两次；5 轮是质量与成本（搜索配额 12 次/run）的平衡点。
+    graph_max_iterations: int = 5
     graph_max_verify_attempts: int = 2
     # 切块参数：size 太小会丢上下文，太大则检索不精准；overlap 用于避免句子被切断
     chunk_size: int = 800
@@ -181,6 +220,13 @@ class Settings(BaseSettings):
     # 本地哈希向量的维度（真实模型时不生效，以模型返回为准）
     embedding_dimension: int = 256
     embedding_timeout_seconds: float = 30.0
+    # [B38] 深度研究是否要求知识库检索具备**语义**能力才肯采用。
+    #
+    # 默认 True。哈希兜底向量只有字面匹配、分数分布重叠（0.47 的无关内容
+    # 能压过 0.44 的相关内容），拿它当依据必然把无关片段写进结论与引用 ——
+    # 用户看到的「引用与研究内容驴唇不对马嘴」就是这么来的。
+    # 关掉它只应在「明确接受检索噪声」时使用（例如本地调试检索链路）。
+    rag_semantic_required: bool = True
 
     # CORS 白名单：允许哪些「浏览器来源」访问后端。用逗号分隔的字符串而不是 list，
     # 因为环境变量天然是字符串，直接解析 list 容易踩坑（需要写 JSON 数组）。
@@ -195,6 +241,72 @@ class Settings(BaseSettings):
     # 所以「写进 .env 但没在 Settings 里声明」的配置项会被静默忽略 ——
     # 表现为「明明配了却不生效」。声明成字段后，它才能被 .env 文件真正驱动。
     frontend_dist: str = ""
+
+    # ----- 生产加固：安全响应头 -----
+    # 统一给所有响应补上安全头（nosniff / X-Frame-Options / Referrer-Policy /
+    # Permissions-Policy / COOP，生产环境再加 HSTS）。默认开启。
+    security_headers_enabled: bool = True
+    # HSTS 只在 HTTPS 下有意义；本地 HTTP 下发会污染浏览器（强制 https 访问 localhost）。
+    # 因此按环境自动判定：environment == "production" 才下发。
+    # CSP：以「同源 + Google Fonts」为基线。脚本只允许同源（构建产物无内联脚本，
+    # 因此不需要 unsafe-inline —— 见前端 index.html 的红线注释）。
+    # 置空字符串可整体关闭 CSP。
+    content_security_policy: str = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+
+    # ----- 生产加固：API 文档开关 -----
+    # /api/docs 与 /api/openapi.json 会暴露全部接口结构，生产环境应关闭。
+    # 显式开关（而不是只看 environment），便于灰度或临时排障时打开。
+    api_docs_enabled: bool = True
+
+    # ----- 生产加固：静态资源缓存 -----
+    # /assets 下的文件名带内容哈希 → 可长缓存（immutable）；index.html 必须 no-cache，
+    # 否则浏览器缓存旧 HTML，部署后仍指向已删除的旧 chunk → 白屏。
+    static_assets_immutable: bool = True
+    static_assets_max_age: int = 31536000  # 1 年
+
+    # ----- 生产加固：基础限流（防额度滥用）-----
+    # 对昂贵的端点（LLM / 研究 / 图 / Agent）按客户端 IP 做进程内滑窗限流，
+    # 避免公开链接被刷爆免费 LLM Key 与 Tavily 搜索额度。
+    # 默认关闭（本地开发/测试不受影响），生产 .env.production 打开。
+    # ⚠️ 进程内实现，仅单 worker 语义正确（与配额一致，勿 --workers>1）。
+    rate_limit_enabled: bool = False
+    rate_limit_requests_per_minute: int = 30
+    # 逗号分隔的路径前缀；只对这些前缀限流（静态资源与 /api/health 不限）。
+    rate_limit_paths: str = "/api/llm,/api/research,/api/graph,/api/agent"
+
+    # ----- 生产加固：每日运行预算（防额度滥用）-----
+    # 和限流的互补关系：限流拦「短时间高频」，预算拦「不紧不慢刷一整天」
+    # （30 次/分钟 × 24h ≈ 4.3 万次调用，足以烧穿免费 LLM / Tavily 额度）。
+    # 按客户端 IP 统计**新建运行**的次数，超限返回 429（error.code = daily_budget_exceeded），
+    # 自然日自动归零；只统计创建运行的端点，「继续/恢复已有运行」不计数。
+    # 默认关闭（本地开发/测试不受影响），生产 .env.production 打开。
+    daily_run_budget_enabled: bool = False
+    daily_run_budget_per_ip: int = 10
+    # 逗号分隔的路径，**精确匹配**（不是前缀）：
+    # 这样 /api/graph/research/{thread_id}/resume 不会被误算成新建运行。
+    daily_run_budget_paths: str = "/api/graph/research,/api/agent/run"
+
+    @property
+    def daily_run_budget_path_list(self) -> list[str]:
+        return [p.strip() for p in self.daily_run_budget_paths.split(",") if p.strip()]
+
+    @property
+    def rate_limit_path_list(self) -> list[str]:
+        return [p.strip() for p in self.rate_limit_paths.split(",") if p.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.strip().lower() == "production"
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import httpx
 from pydantic import BaseModel, Field
 
 from app.core.security import assert_public_http_url, sanitize_untrusted_text
-from app.tools.base import BaseTool, ToolContext
+from app.tools.base import BaseTool, ToolContext, ToolError
 
 _USER_AGENT = "AIResearchWorkspaceBot/0.1 (+research agent)"
 
@@ -75,6 +77,21 @@ class FetchWebpageTool(BaseTool):
     )
     args_schema = FetchWebpageArgs
     timeout_seconds = 25.0
+    # 抓取不产生第三方计费，网络抖动天然可重试（由 BaseTool 用配置做退避重试）。
+    retryable = True
+
+    def __init__(self) -> None:
+        # 共享 client（带连接池）：一个 run 会抓多个 URL，复用连接避免重复握手。
+        self._shared_client: httpx.AsyncClient | None = None
+
+    @asynccontextmanager
+    async def _http(self) -> AsyncIterator[httpx.AsyncClient]:
+        if self._shared_client is None or self._shared_client.is_closed:
+            self._shared_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(20.0),
+                follow_redirects=False,  # 重定向是绕过 SSRF 校验的经典手法，绝不跟随
+            )
+        yield self._shared_client
 
     async def _run(self, args: BaseModel, ctx: ToolContext) -> str:
         assert isinstance(args, FetchWebpageArgs)
@@ -85,21 +102,26 @@ class FetchWebpageTool(BaseTool):
         # 闸门 2：超时 + 不跟随重定向
         # [B9] 用流式读取 + 大小上限：之前是 response.text，会把整个响应体
         # 一次性读进内存，一个几百 MB 的 URL 就能把进程撑爆。
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(20.0),
-            follow_redirects=False,
-        ) as client:
-            async with client.stream(
-                "GET", url, headers={"User-Agent": _USER_AGENT}
-            ) as response:
-                if response.status_code >= 400:
-                    return f"[抓取失败] HTTP {response.status_code}"
+        # [robustness] httpx 的超时/网络异常翻译成可分类的 ToolError（kind=timeout/network），
+        # 否则会被兜底成 execution_error ——「站点连不上」和「代码 bug」就分不清了，
+        # 也无法被上层重试。
+        try:
+            async with self._http() as client:
+                async with client.stream(
+                    "GET", url, headers={"User-Agent": _USER_AGENT}
+                ) as response:
+                    if response.status_code >= 400:
+                        return f"[抓取失败] HTTP {response.status_code}"
 
-                content_type = response.headers.get("content-type", "")
-                if "html" not in content_type and "text" not in content_type:
-                    return f"[跳过] 非文本内容（content-type={content_type}）"
+                    content_type = response.headers.get("content-type", "")
+                    if "html" not in content_type and "text" not in content_type:
+                        return f"[跳过] 非文本内容（content-type={content_type}）"
 
-                raw_html = await _read_limited(response, _MAX_RESPONSE_BYTES)
+                    raw_html = await _read_limited(response, _MAX_RESPONSE_BYTES)
+        except httpx.TimeoutException as exc:
+            raise ToolError(f"抓取超时：{exc}", error_kind="timeout") from exc
+        except httpx.TransportError as exc:
+            raise ToolError(f"无法连接目标站点：{exc}", error_kind="network") from exc
 
         # 闸门 3：清洗 + 截断。返回值仍会被 orchestrator 标记为不可信数据块
         return sanitize_untrusted_text(html_to_text(raw_html), args.max_chars)

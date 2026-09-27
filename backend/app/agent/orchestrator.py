@@ -26,6 +26,7 @@ from app.agent.schemas import (
 from app.core.config import get_settings
 from app.core.security import wrap_untrusted_block
 from app.llm.client import LLMClient
+from app.llm.errors import LLMError
 from app.llm.schemas import ChatMessage, LLMRequest, TokenUsage
 from app.tools.base import ToolContext, ToolResult
 from app.tools.registry import ToolNotFoundError, ToolRegistry
@@ -83,6 +84,9 @@ async def run_agent(
     finished_reason = "max_steps_reached"
     answer = ""
     citations: dict[str, dict] = {}  # chunk_id -> citation，用于去重
+    # 「模型输出不符合 schema」的次数。达到上限才放弃，避免无限空转。
+    parse_failures = 0
+    max_parse_failures = 2
 
     for step_index in range(1, max_steps + 1):
         elapsed = time.perf_counter() - started
@@ -91,7 +95,35 @@ async def run_agent(
             finished_reason = "timeout"
             break
 
-        decision, step_usage = await _ask(messages)
+        try:
+            decision, step_usage = await _ask(messages)
+        except LLMError as exc:
+            # [robustness] 「模型输出不符合 schema」是**可修复**的：把原因回灌、本步作废重来，
+            # 而不是把整次运行判成"大模型调用失败"（502）。小模型（GLM-4-Flash 等）
+            # 偶发不守 JSON 约定是常态，不该升级成服务不可用。
+            # 只对 parse 类失败这样做；连接/鉴权等真实故障仍然向上抛。
+            if exc.kind != "parse" or parse_failures >= max_parse_failures:
+                raise
+            parse_failures += 1
+            logger.warning(
+                "agent 第 %s 步输出不合法（%s/%s），回灌原因重来：%s",
+                step_index,
+                parse_failures,
+                max_parse_failures,
+                exc.message,
+            )
+            messages.append(
+                ChatMessage(
+                    role="user",
+                    content=(
+                        "你上一步的输出没有通过 JSON 校验，原因："
+                        + exc.message
+                        + '。请只输出一个合法 JSON：要么 {"action": {...}}，'
+                        '要么 {"final_answer": "..."}，二选一，不要多余文字或代码块。'
+                    ),
+                )
+            )
+            continue
         _sum_usage(usage, step_usage)
 
         # 分支一：模型认为可以结束了

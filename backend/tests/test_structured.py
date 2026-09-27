@@ -11,8 +11,10 @@ from app.llm.errors import LLMError
 from app.llm.structured import parse_structured_payload
 from app.schemas.research import ResearchPlan
 
+# [B24] ResearchPlan 现在要求 questions ≥ 3（少于 3 个子问题判为「拆解不及格」），
+# 这里的 payload 只验证解析容错，不是验证内容策略，所以给足 4 个。
 _VALID_PLAN = """
-{"goal": "g", "questions": ["q1"],
+{"goal": "g", "questions": ["q1", "q2", "q3", "q4"],
  "steps": [{"index": 1, "title": "t", "instruction": "i"}],
  "expected_sources": ["s"]}
 """

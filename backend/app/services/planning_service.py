@@ -73,7 +73,7 @@ async def create_research_plan(
         result.response.latency_ms,
     )
 
-    return PlanResponse(
+    response = PlanResponse(
         plan=result.data,
         model=result.response.model,
         provider=client.provider_name,
@@ -81,3 +81,22 @@ async def create_research_plan(
         usage=result.response.usage.model_dump(),
         latency_ms=result.response.latency_ms,
     )
+
+    # [B27] 落库供「历史规划」列表回看。存储失败（如磁盘问题）不影响主流程返回。
+    try:
+        from app.graph.plan_store import get_plan_store  # noqa: PLC0415
+
+        record = get_plan_store().save(
+            question=question,
+            plan=result.data.model_dump(),
+            model=response.model,
+            provider=response.provider,
+            mock=response.mock,
+            usage=response.usage,
+            latency_ms=response.latency_ms,
+        )
+        response.plan_id = record["id"]
+    except Exception:  # noqa: BLE001
+        logger.warning("研究计划落库失败（不影响返回）", exc_info=True)
+
+    return response

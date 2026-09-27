@@ -1,14 +1,58 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
+import { AnimatePresence, LazyMotion, domAnimation } from 'motion/react'
 import { ChevronDownIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon } from './components/icons'
-import { Dashboard } from './features/dashboard/Dashboard'
-import { ResearchPlanner } from './features/research/ResearchPlanner'
-import { AgentRunner } from './features/agent/AgentRunner'
-import { KnowledgeBase } from './features/knowledge/KnowledgeBase'
-import { ResearchWorkflow } from './features/workflow/ResearchWorkflow'
-import { Tutorial } from './features/tutorial/Tutorial'
-import { Reports } from './features/reports/Reports'
-import { Evaluation } from './features/evaluation/Evaluation'
-import { Settings } from './features/settings/Settings'
+import { ToastHost } from './components/Toast'
+import { PageShell } from './components/PageShell'
+import { ScrollProgress } from './components/ScrollProgress'
+import { LoadingState } from './components/LoadingState'
+
+/**
+ * 页面级按需加载。
+ *
+ * 为什么用 React.lazy 而不是路由库：项目红线明确「不引入 react-router」。
+ * 而 SPA 只有 9 个静态页面，本来也不需要路由 —— 用状态切页 + lazy 就够了。
+ * 收益：首屏只下载「概览」相关的代码，报告/教程/设置等模块点开才加载。
+ */
+const Dashboard = lazy(() =>
+  import('./features/dashboard/Dashboard').then((m) => ({ default: m.Dashboard })),
+)
+const ResearchWorkflow = lazy(() =>
+  import('./features/workflow/ResearchWorkflow').then((m) => ({ default: m.ResearchWorkflow })),
+)
+const ResearchPlanner = lazy(() =>
+  import('./features/research/ResearchPlanner').then((m) => ({ default: m.ResearchPlanner })),
+)
+const AgentRunner = lazy(() =>
+  import('./features/agent/AgentRunner').then((m) => ({ default: m.AgentRunner })),
+)
+const KnowledgeBase = lazy(() =>
+  import('./features/knowledge/KnowledgeBase').then((m) => ({ default: m.KnowledgeBase })),
+)
+const Tutorial = lazy(() =>
+  import('./features/tutorial/Tutorial').then((m) => ({ default: m.Tutorial })),
+)
+const Reports = lazy(() =>
+  import('./features/reports/Reports').then((m) => ({ default: m.Reports })),
+)
+const Evaluation = lazy(() =>
+  import('./features/evaluation/Evaluation').then((m) => ({ default: m.Evaluation })),
+)
+const Settings = lazy(() =>
+  import('./features/settings/Settings').then((m) => ({ default: m.Settings })),
+)
+
+/** 空闲时预热「深度研究」（推荐入口），消掉首次点击的加载感 */
+function usePrefetchPrimaryPage() {
+  useEffect(() => {
+    const warm = () => {
+      void import('./features/workflow/ResearchWorkflow')
+    }
+    const idle = (window as unknown as { requestIdleCallback?: (cb: () => void) => number })
+      .requestIdleCallback
+    if (typeof idle === 'function') idle(warm)
+    else window.setTimeout(warm, 1500)
+  }, [])
+}
 
 /**
  * 顶栏导航 + 内容区。
@@ -102,6 +146,37 @@ function readStoredPage(): PageKey {
   }
 }
 
+/**
+ * 从 URL hash（`#/workflow`）解析页面：让页面可刷新、可分享、可后退。
+ *
+ * 为什么用 hash 而不是引入路由库：项目红线是「不引入 react-router」，
+ * 而 9 个静态页面只需要一个「当前页」标识 —— hash 零依赖，且天然兼容
+ * 后端的 SPA fallback（任何路径都回落 index.html）。非法值返回 null。
+ */
+function readHashPage(): PageKey | null {
+  const raw = window.location.hash.replace(/^#\/?/, '')
+  const page = raw.split('?')[0]
+  return page && (PAGE_KEYS as string[]).includes(page) ? (page as PageKey) : null
+}
+
+/**
+ * 从 URL hash 解析「要打开哪一次运行」：`#/reports?thread=thread_xxx`。
+ *
+ * [F11] 效果评估页的「最近运行」需要能跳到具体某一次运行 ——
+ * 但只有页面标识不足以表达「打开哪一条」，所以给 hash 加一个可选的 thread 参数。
+ * 这样链接可分享、可刷新、可后退，和既有的「hash 即状态」设计一致，依然零依赖。
+ */
+function readHashThread(): string | null {
+  const raw = window.location.hash.replace(/^#\/?/, '')
+  const queryStart = raw.indexOf('?')
+  if (queryStart < 0) return null
+  const thread = new URLSearchParams(raw.slice(queryStart + 1)).get('thread')
+  return thread && thread.trim() ? thread.trim() : null
+}
+
+/** 跨页跳转用的导航签名：可选的 threadId 表示「并且打开这一次运行」 */
+export type NavigateFn = (key: string, threadId?: string) => void
+
 /* ===================== 共用的导航项渲染（§2.5） ===================== */
 
 interface NavLinkButtonProps {
@@ -140,12 +215,16 @@ function NavLinkButton({ item, page, core, onNavigate }: NavLinkButtonProps) {
 /* ===================== App ===================== */
 
 export default function App() {
-  // 初始值读 sessionStorage；写入放在 effect 里，避免首帧把 'dashboard' 写回去
-  const [page, setPage] = useState<PageKey>(() => readStoredPage())
+  // 初始页：优先 URL hash（分享链接 / 刷新），其次 sessionStorage（会话内记忆）；
+  // 写入统一放在 effect 里，避免首帧把 'dashboard' 写回去
+  const [page, setPage] = useState<PageKey>(() => readHashPage() ?? readStoredPage())
+  // [F11] 深链目标：`#/reports?thread=xxx` 要求目标页打开这一次运行
+  const [focusThread, setFocusThread] = useState<string | null>(() => readHashThread())
   const [theme, setTheme] = useState<'light' | 'dark'>(
     () => (localStorage.getItem('arw-theme') as 'light' | 'dark') || 'light',
   )
   const [scrolled, setScrolled] = useState(false)
+  usePrefetchPrimaryPage()
   // 唯一的 UI 状态：移动端抽屉开合
   const [navOpen, setNavOpen] = useState(false)
 
@@ -154,14 +233,37 @@ export default function App() {
     localStorage.setItem('arw-theme', theme)
   }, [theme])
 
-  // 会话内页面记忆：切页 → 写入（§2.6）
+  // 页面记忆双写（§2.6 扩展）：sessionStorage 负责会话内恢复，
+  // URL hash 负责刷新 / 分享 / 后退 —— 用 pushState 而非改 location.hash，
+  // 既不触发 hashchange（避免与下面的监听自回环），又能留下后退历史。
   useEffect(() => {
     try {
       sessionStorage.setItem(PAGE_KEY, page)
     } catch {
       // 存储被禁用时静默降级
     }
-  }, [page])
+    const target = focusThread
+      ? `#/${page}?thread=${encodeURIComponent(focusThread)}`
+      : `#/${page}`
+    if (window.location.hash !== target) {
+      window.history.pushState(null, '', target)
+    }
+  }, [page, focusThread])
+
+  // 浏览器后退/前进（popstate）与手动改 hash（hashchange）：一律跟随 URL
+  useEffect(() => {
+    const syncFromHash = () => {
+      const fromHash = readHashPage()
+      if (fromHash) setPage(fromHash)
+      setFocusThread(readHashThread())
+    }
+    window.addEventListener('popstate', syncFromHash)
+    window.addEventListener('hashchange', syncFromHash)
+    return () => {
+      window.removeEventListener('popstate', syncFromHash)
+      window.removeEventListener('hashchange', syncFromHash)
+    }
+  }, [])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12)
@@ -193,10 +295,21 @@ export default function App() {
     }
   }, [navOpen])
 
-  const navigate = (key: string) => {
+  /** 深链目标已处理完：清掉它（同时把 URL 里的 ?thread= 去掉） */
+  const clearFocusThread = useCallback(() => setFocusThread(null), [])
+
+  /**
+   * 切换页面。
+   *
+   * [F11] 第二个参数 threadId：带上它表示「跳到该页面并打开这一次运行」
+   * （效果评估页的最近运行列表就是靠它实现「点一条 → 直接看到那条」）。
+   * 不传即普通导航，同时清掉上一次的深链目标，避免旧目标在新页面上残留生效。
+   */
+  const navigate: NavigateFn = (key, threadId) => {
     const item = NAV_ITEMS.find((i) => i.key === key)
     if (item) {
       setPage(item.key)
+      setFocusThread(threadId ?? null)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
@@ -211,6 +324,7 @@ export default function App() {
   const hasCore = (group: NavGroup) => group.items.some((item) => NAV_CORE_KEYS.includes(item.key))
 
   return (
+    <LazyMotion features={domAnimation} strict>
     <div className="site-shell">
       <header className="global-nav" data-scrolled={scrolled}>
         <div className="nav-inner">
@@ -224,29 +338,35 @@ export default function App() {
           >
             <span className="nav-logo">ARW</span>
             AI 研究工作台
-            <small>研究智能体</small>
           </a>
 
-          {/* ≥768px 顶栏：按分组渲染；NAV_CORE_KEYS 之外的项打 data-core="false"，由 responsive.css 隐藏 */}
+          {/* ≥768px 顶栏：渲染全部分组；含 core 项的组打 data-core="true"、整组无 core 的组
+              （如「系统」）打 data-has-core="false"，由 responsive.css 在 ≤1023px 隐藏其整组，
+              避免「空组 + 孤立竖线」。≤1023px 非 core 单项也隐藏，仅留 core 三项 + 「更多」下拉。
+              「更多」下拉始终渲染全部 9 项，确保 768–1023px 仍可到达系统设置 / 教程。
+              注意：≥1024px 时整组都渲染（含系统组），否则桌面端将完全无法访问设置/教程。 */}
           <nav className="nav-menu" aria-label="主导航">
-            {NAV_GROUPS.map((group) =>
-              hasCore(group) ? (
-                <div className="nav-group" data-group={group.id} key={group.id}>
-                  {group.label && (
-                    <span className="nav-group__label" aria-hidden="true">{group.label}</span>
-                  )}
-                  {group.items.map((item) => (
-                    <NavLinkButton
-                      key={item.key}
-                      item={item}
-                      page={page}
-                      core={NAV_CORE_KEYS.includes(item.key)}
-                      onNavigate={navigate}
-                    />
-                  ))}
-                </div>
-              ) : null,
-            )}
+            {NAV_GROUPS.map((group) => (
+              <div
+                className="nav-group"
+                data-group={group.id}
+                data-has-core={hasCore(group) ? 'true' : 'false'}
+                key={group.id}
+              >
+                {group.label && (
+                  <span className="nav-group__label" aria-hidden="true">{group.label}</span>
+                )}
+                {group.items.map((item) => (
+                  <NavLinkButton
+                    key={item.key}
+                    item={item}
+                    page={page}
+                    core={NAV_CORE_KEYS.includes(item.key)}
+                    onNavigate={navigate}
+                  />
+                ))}
+              </div>
+            ))}
           </nav>
 
           {/* 平板档（768–1023px）「更多」下拉：纯 CSS 展开，无 state。
@@ -331,21 +451,40 @@ export default function App() {
         </div>
       )}
 
+      <ScrollProgress />
+
       <main className="main">
-        <div className="shell shell--tight">
-          {page === 'dashboard' && <Dashboard onNavigate={navigate} />}
-          {page === 'workflow' && <ResearchWorkflow />}
-          {page === 'research' && <ResearchPlanner />}
-          {page === 'agent' && <AgentRunner />}
-          {page === 'knowledge' && <KnowledgeBase />}
-          {page === 'tutorial' && <Tutorial onNavigate={navigate} />}
-          {page === 'reports' && <Reports />}
-          {page === 'evaluation' && <Evaluation />}
-          {page === 'settings' && <Settings />}
-        </div>
+        {/* AnimatePresence + key：切页时先播离场再播入场，避免两页内容重叠闪烁 */}
+        <AnimatePresence mode="wait" initial={false}>
+          <PageShell key={page}>
+            <div className="shell shell--tight">
+              <Suspense
+                fallback={<LoadingState variant="card" rows={4} label="正在加载模块…" />}
+              >
+                {page === 'dashboard' && <Dashboard onNavigate={navigate} />}
+                {page === 'workflow' && <ResearchWorkflow focusThread={focusThread} />}
+                {page === 'research' && <ResearchPlanner onNavigate={navigate} />}
+                {page === 'agent' && <AgentRunner />}
+                {page === 'knowledge' && <KnowledgeBase />}
+                {page === 'tutorial' && <Tutorial onNavigate={navigate} />}
+                {page === 'reports' && (
+                  <Reports
+                    focusThread={focusThread}
+                    onFocusConsumed={clearFocusThread}
+                    onOpenReport={(threadId) => navigate('reports', threadId)}
+                  />
+                )}
+                {page === 'evaluation' && <Evaluation onNavigate={navigate} />}
+                {page === 'settings' && <Settings />}
+              </Suspense>
+            </div>
+          </PageShell>
+        </AnimatePresence>
       </main>
 
-      {/* T05 在此挂载 <ToastHost />（模块级单例，零 prop drilling，不改动既有元素结构） */}
+      {/* 全局轻提示：任何模块一行 notify() 即可给出操作反馈 */}
+      <ToastHost />
     </div>
+    </LazyMotion>
   )
 }

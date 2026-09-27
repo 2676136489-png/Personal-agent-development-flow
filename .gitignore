@@ -21,7 +21,10 @@ vite.config.ts.timestamp-*.mjs
 # 前端构建产物在 backend/ 下的自包含副本（单端口部署用）。
 # 它是 frontend/dist 的拷贝，属于构建产物，不入库；但**部署上传时需要它存在**，
 # 所以是「git 忽略、本地保留」——两边都需要，只是用途不同。
-backend/frontend_dist/
+#
+# ⚠️ 目录名必须是 `webapp`（不能再叫 frontend_dist）：线上部署工具会把名字里含
+#    `dist` 的目录当作"构建产物"排除出上传，导致后端更新了、前端却永远停在旧版本。
+backend/webapp/
 
 # ----- Environment（绝不能提交）-----
 # 注意：`.env` 与 `.env.local` 里含真实 API Key / 生产凭据。

@@ -21,6 +21,11 @@
   .nav-menu .nav-link[data-core='false'] {
     display: none;
   }
+  /* 整组都无 core 项（如「系统」）在平板档隐藏其整组，避免「空组 + 孤立竖线」；
+     这些项仍由「更多」下拉承载（见 App.tsx）。≥1024px 时整组渲染，设置/教程可直达。 */
+  .nav-menu .nav-group[data-has-core='false'] {
+    display: none;
+  }
   .nav-more {
     display: block;
   }

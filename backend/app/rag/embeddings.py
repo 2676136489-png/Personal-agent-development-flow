@@ -128,3 +128,20 @@ def get_embedding_provider() -> EmbeddingProvider:
         model=settings.embedding_model,
         timeout=settings.embedding_timeout_seconds,
     )
+
+
+def embeddings_have_semantic_power() -> bool:
+    """当前向量是否具备**语义**检索能力（而不是字面匹配）。
+
+    [B38] 这个判断是「能不能把检索结果当作依据」的前提，必须显式问出来。
+
+    为什么不能只看 score 阈值：
+    哈希向量的分数分布在 0.3~0.6，**相关与不相关严重重叠** ——
+    实测「向量数据库选型对比」得 0.587（相关），而完全无关的
+    「深度学习模型部署与量化」却能拿到 0.473。任何绝对阈值都切不开它，
+    因为字面 token 重叠和语义相关本来就是两回事。
+    """
+    try:
+        return not isinstance(get_embedding_provider(), HashEmbeddingProvider)
+    except Exception:  # noqa: BLE001 - 取不到 provider 时按「不可信」处理，宁可不用
+        return False

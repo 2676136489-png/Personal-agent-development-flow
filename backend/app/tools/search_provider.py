@@ -10,6 +10,8 @@
 - search_provider="tavily"：强制 Tavily（没 Key 则告警并回退离线语料）
 - search_provider="stub"：始终使用离线示例语料
 
+为什么依赖第三方搜索服务、以及不依赖它的替代路线取舍，见 `docs/search-strategy.md`。
+
 ## 配额（T02）
 
 真实 provider 每次请求前都会 `reserve()`（预扣），请求结束后 `settle()`（确认）或
@@ -25,25 +27,30 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from functools import lru_cache
-from typing import Callable, Protocol
+from typing import Protocol
 
 import httpx
 from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
+from app.observability import metrics
 from app.search.errors import QuotaExhaustedError, SearchProviderError
 from app.search.quota import (
     CREDITS_BY_DEPTH,
     DEFAULT_DEPTH,
     SearchQuotaStore,
-    current_run_id,
     credits_for,
+    current_run_id,
 )
 
 logger = logging.getLogger(__name__)
 
 _TAVILY_ENDPOINT = "https://api.tavily.com/search"
+# 单次搜索的上游超时。超过就抛 timeout 错误，由工具层决定是否重试。
+_TAVILY_TIMEOUT_SECONDS = 20.0
 
 
 class SearchResult(BaseModel):
@@ -189,6 +196,9 @@ class TavilySearchProvider:
         self._quota = quota
         # 只给测试用的注入点（httpx.MockTransport 需要），生产路径保持默认。
         self._client_factory = client_factory
+        # 共享 client（带连接池）。每次请求新建 AsyncClient 会丢掉 TCP/TLS 复用，
+        # 而搜索是「每个子问题一次」的高频调用，复用连接能显著降延迟与 TIME_WAIT。
+        self._shared_client: httpx.AsyncClient | None = None
 
     @property
     def depth(self) -> str:
@@ -197,6 +207,25 @@ class TavilySearchProvider:
     @property
     def credits(self) -> int:
         return self._credits
+
+    @asynccontextmanager
+    async def _http(self) -> AsyncIterator[httpx.AsyncClient]:
+        """取一个 httpx client：注入的（测试）用完即关，共享的（生产）常驻不关。"""
+        if self._client_factory is not None:
+            async with self._client_factory() as injected:  # type: ignore[operator]
+                yield injected
+            return
+
+        if self._shared_client is None or self._shared_client.is_closed:
+            self._shared_client = httpx.AsyncClient(
+                timeout=_TAVILY_TIMEOUT_SECONDS,
+                limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
+            )
+        yield self._shared_client
+
+    def _record_call(self, result: str) -> None:
+        """记一次搜索调用结果（`ok` / `timeout` / `rate_limit` / `quota_exhausted` …）。"""
+        metrics.inc(metrics.SEARCH_CALLS_TOTAL, {"depth": self._depth, "result": result})
 
     async def search(
         self,
@@ -216,22 +245,36 @@ class TavilySearchProvider:
                 "include_answer": False,
                 "include_raw_content": False,
             }
-            client = self._client_factory or (lambda: httpx.AsyncClient(timeout=20.0))
-            async with client() as http:
+            async with self._http() as http:
                 resp = await http.post(_TAVILY_ENDPOINT, json=payload)
             status = resp.status_code
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as exc:
             # 超时也可能已被受理，保守处理：不退款，只记一次失败调用
             self._settle_failed(reservation, "timeout")
-            return []
-        except httpx.TransportError:
+            self._record_call("timeout")
+            # ⚠️ 不再 `return []`：那会让「搜索超时」和「真的没搜到」在调用方眼里一样，
+            # Agent 会以为"这个话题没有资料"，于是带着错误前提继续写报告。
+            # 必须抛出，把失败如实回灌给上层：由 research 节点「重新决策 → 再检索」承担恢复，
+            # 而不是在工具层自动重试（重试会再预扣一笔 credits，见 SearchWebTool.retryable）。
+            raise SearchProviderError(
+                f"搜索服务超时（{_TAVILY_TIMEOUT_SECONDS}s）：{exc}", error_kind="timeout"
+            ) from exc
+        except httpx.TransportError as exc:
             self._settle_failed(reservation, "network")
-            return []
+            self._record_call("network")
+            raise SearchProviderError(
+                f"无法连接搜索服务：{exc}", error_kind="network"
+            ) from exc
 
         if status >= 400:
             return self._handle_error_status(status, reservation)
 
         self._settle_ok(reservation)
+        self._record_call("ok")
+        # 额度消耗单独记一条（credits，不是次数）——「还剩多少」比「调了几次」更接近成本。
+        metrics.inc(
+            metrics.SEARCH_CREDITS_USED_TOTAL, {"depth": self._depth}, value=float(self._credits)
+        )
         data = resp.json()
         results: list[SearchResult] = []
         for item in data.get("results", []):
@@ -254,6 +297,7 @@ class TavilySearchProvider:
         reservation = self._quota.try_reserve(depth=self._depth, run_key=run_key)
         if reservation is None:
             remaining = self._quota.remaining_credits()
+            self._record_call("quota_exhausted")
             raise QuotaExhaustedError(
                 f"搜索额度不足：本次搜索需要 {self._credits} credits，"
                 f"本期剩余 {remaining} credits，下月 1 日重置。"
@@ -301,6 +345,7 @@ class TavilySearchProvider:
 
     def _handle_error_status(self, status: int, reservation: object) -> list[SearchResult]:
         kind = self._classify_status(status)
+        self._record_call(kind)
         if kind in ("quota_exhausted", "rate_limit"):
             # 上游没有受理这次请求：把预扣退回去，谁都没花钱
             self._release(reservation, degraded=kind == "quota_exhausted")
@@ -308,14 +353,19 @@ class TavilySearchProvider:
                 f"搜索服务返回 HTTP {status}（{kind}）："
                 f"本次搜索额度已用尽，本报告可能缺少联网证据。"
                 if kind == "quota_exhausted"
-                else f"搜索服务返回 HTTP 429（请求太频繁）：请稍后重试。"
+                else "搜索服务返回 HTTP 429（请求太频繁）：请稍后重试。"
             )
             if kind == "quota_exhausted":
                 raise QuotaExhaustedError(message)
             raise SearchProviderError(message, error_kind="rate_limit")
 
+        # 5xx / 4xx：请求确已被受理（可能已计费），不退款，只记一次失败调用。
+        # 同样**不再 return []** —— 与超时同理，把失败如实抛给工具层。
         self._settle_failed(reservation, kind)
-        return []
+        raise SearchProviderError(
+            f"搜索服务返回 HTTP {status}（{kind}）",
+            error_kind=kind,
+        )
 
 
 @lru_cache(maxsize=1)

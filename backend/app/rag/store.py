@@ -85,7 +85,7 @@ class KnowledgeStore:
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        self._conn = sqlite3.connect(str(db_path), check_same_thread=False, timeout=10)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
@@ -229,6 +229,18 @@ class KnowledgeStore:
             "SELECT * FROM documents WHERE id = ?", (document_id,)
         ).fetchone()
         return self._row_to_document(row) if row else None
+
+    def delete_document(self, document_id: str) -> bool:
+        """删除一份文档及其全部 chunk（向量索引会在下次检索时按版本号重建）。"""
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM document_chunks WHERE document_id = ?", (document_id,)
+            )
+            cursor = self._conn.execute(
+                "DELETE FROM documents WHERE id = ?", (document_id,)
+            )
+            self._conn.commit()
+        return cursor.rowcount > 0
 
     def get_chunk(self, chunk_id: str) -> DocumentChunk | None:
         row = self._conn.execute(

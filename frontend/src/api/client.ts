@@ -65,6 +65,55 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError'
 }
 
+/** 把 HTTP 状态码翻译成用户能看懂的一句短语。 */
+function describeStatus(status: number): string {
+  if (status === 0) return '网络错误'
+  if (status === 401) return '未授权'
+  if (status === 403) return '无权限'
+  if (status === 404) return '接口不存在'
+  if (status === 408) return '服务端等待超时'
+  if (status === 429) return '请求过于频繁'
+  if (status === 502) return '网关错误'
+  if (status === 504) return '网关超时'
+  if (status >= 500) return `服务端错误（HTTP ${status}）`
+  return `HTTP ${status}`
+}
+
+/** 额度类错误的详情（见后端 DailyRunBudgetMiddleware 的 details）。 */
+interface BudgetDetails {
+  /** 额度重置时刻（epoch 毫秒）。后端只回时间戳，由前端翻译成本地时间。 */
+  reset_at_ms?: number
+}
+
+/** 把重置时刻渲染成「今天 23:59 / 明天 08:00 / 9 月 30 日 00:00」这种人话。 */
+export function formatResetMoment(ms: number): string {
+  const date = new Date(ms)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+  const now = new Date()
+  if (sameDay(date, now)) return `今天 ${time}`
+  const tomorrow = new Date(now.getTime())
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (sameDay(date, tomorrow)) return `明天 ${time}`
+  return `${date.getMonth() + 1} 月 ${date.getDate()} 日 ${time}`
+}
+
+/**
+ * 给「每日运行预算用尽」这类额度错误补上恢复时刻。
+ *
+ * 后端有意只回 epoch 毫秒（它不知道也不该猜客户端时区），
+ * 由这里翻译成本地时间 —— 用户最关心的是「几点能再用」。
+ */
+function decorateErrorMessage(code: string, message: string, details: unknown): string {
+  if (code !== 'daily_budget_exceeded') return message
+  const resetAt = (details as BudgetDetails | undefined)?.reset_at_ms
+  if (typeof resetAt !== 'number') return message
+  const moment = formatResetMoment(resetAt)
+  return moment ? `${message}（${moment}恢复）` : message
+}
+
 /**
  * [F1] 把「外部 signal + 超时」合并成一个控制器。
  *
@@ -91,6 +140,84 @@ function withTimeout(
   }
 
   return { signal: controller.signal, cleanup }
+}
+
+/**
+ * 统一解析响应信封，并把失败翻译成 `ApiClientError`。
+ *
+ * [F11] 关键改进：**先把 body 读成文本**，再尝试 JSON 解析。
+ * 这样在「响应不是 JSON」时能拿到 HTTP 状态码 + Content-Type + 片段，
+ * 给出可诊断的错误，而不是笼统一句"请确认 API_BASE_URL"。
+ *
+ * 现实中最常见的「非 JSON 响应」根因，是**网关/反向代理返回的 HTML 错误页**
+ * （例如长时间请求被代理判定超时后返回 502/504 页面），其次才是接口地址不对。
+ * 把这两种情况在文案里区分开，排障效率完全不同。
+ */
+async function parseEnvelope<T>(response: Response, path: string): Promise<T> {
+  let raw = ''
+  try {
+    raw = await response.text()
+  } catch {
+    raw = ''
+  }
+  const contentType = response.headers.get('content-type') ?? ''
+
+  let payload: ApiResponse<T> | null = null
+  let parsed = false
+  if (raw.trim()) {
+    try {
+      payload = JSON.parse(raw) as ApiResponse<T>
+      parsed = true
+    } catch {
+      parsed = false
+    }
+  }
+
+  // ① 不是 JSON（空 body / HTML 错误页 / 纯文本）
+  if (!parsed) {
+    const looksHtml = /^\s*<(?:!doctype|html)/i.test(raw)
+    const cause = looksHtml
+      ? '收到的是 HTML 页面，通常是网关/代理错误页（例如请求超时）或接口地址不对'
+      : raw.trim()
+        ? '响应体不是合法 JSON'
+        : '响应体为空'
+    const snippet = raw.replace(/\s+/g, ' ').trim().slice(0, 120)
+    throw new ApiClientError({
+      message:
+        `后端返回了非 JSON 响应（${describeStatus(response.status)}` +
+        `${contentType ? `，${contentType}` : ''}）：${cause}` +
+        `${snippet ? `。响应片段：${snippet}` : ''}`,
+      code: 'invalid_response',
+      status: response.status,
+      details: { path, contentType, snippet },
+    })
+  }
+
+  // ② HTTP 状态码和 body 里的 success 都要看。
+  // 后端保证 success=false 时一定带 error，但反过来 4xx/5xx 也可能带 error。
+  if (!response.ok || !payload!.success) {
+    const code = payload?.error?.code ?? 'http_error'
+    throw new ApiClientError({
+      message: decorateErrorMessage(
+        code,
+        payload?.error?.message ?? `请求失败（${describeStatus(response.status)}）`,
+        payload?.error?.details,
+      ),
+      code,
+      status: response.status,
+      details: payload?.error?.details,
+    })
+  }
+
+  if (payload!.data === null) {
+    throw new ApiClientError({
+      message: '后端返回了空的 data',
+      code: 'empty_data',
+      status: response.status,
+    })
+  }
+
+  return payload!.data
 }
 
 async function request<T>(
@@ -121,46 +248,17 @@ async function request<T>(
     }
     // [F1] 网络层失败（后端未启动 / 断网）也要包成 ApiClientError，
     // 否则调用方 catch 到的是裸 TypeError，UI 无法给出可读提示。
+    // [F11] 用 apiBaseUrlForDisplay() 而不是 API_BASE_URL：后者在同源部署下是
+    //       空串，拼出来会变成「无法连接后端（），…」这种空括号。
     throw new ApiClientError({
-      message: `无法连接后端（${API_BASE_URL}），请确认服务已启动`,
+      message: `无法连接后端（${apiBaseUrlForDisplay()}），请确认服务已启动`,
       code: 'network_error',
       status: 0,
     })
   }
   cleanup()
 
-  let payload: ApiResponse<T> | null = null
-  try {
-    payload = (await response.json()) as ApiResponse<T>
-  } catch {
-    // 后端返回了非 JSON（例如网关的 HTML 错误页）
-    throw new ApiClientError({
-      message: '后端返回了非 JSON 响应，请确认 API_BASE_URL 指向的是后端服务',
-      code: 'invalid_response',
-      status: response.status,
-    })
-  }
-
-  // 关键：HTTP 状态码和 body 里的 success 都要看。
-  // 后端保证 success=false 时一定带 error，但反过来 4xx/5xx 也可能带 error。
-  if (!response.ok || !payload.success) {
-    throw new ApiClientError({
-      message: payload?.error?.message ?? `请求失败（HTTP ${response.status}）`,
-      code: payload?.error?.code ?? 'http_error',
-      status: response.status,
-      details: payload?.error?.details,
-    })
-  }
-
-  if (payload.data === null) {
-    throw new ApiClientError({
-      message: '后端返回了空的 data',
-      code: 'empty_data',
-      status: response.status,
-    })
-  }
-
-  return payload.data
+  return parseEnvelope<T>(response, path)
 }
 
 export function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -174,6 +272,10 @@ export function apiPost<T>(path: string, body: unknown, signal?: AbortSignal): P
     body: JSON.stringify(body),
     signal,
   })
+}
+
+export function apiDelete<T>(path: string, signal?: AbortSignal): Promise<T> {
+  return request<T>(path, { method: 'DELETE', signal })
 }
 
 /** 文件上传：multipart 不能设置 Content-Type，交给浏览器自动带 boundary */
@@ -194,7 +296,7 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
       throw new ApiClientError({ message: '上传超时', code: 'aborted', status: 0 })
     }
     throw new ApiClientError({
-      message: `无法连接后端（${API_BASE_URL}）`,
+      message: `无法连接后端（${apiBaseUrlForDisplay()}）`,
       code: 'network_error',
       status: 0,
     })
@@ -203,23 +305,5 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
   }
 
   // [F7] 复用与 request() 相同的错误分支：非 JSON 响应不再抛裸 SyntaxError
-  let payload: ApiResponse<T> | null = null
-  try {
-    payload = (await response.json()) as ApiResponse<T>
-  } catch {
-    throw new ApiClientError({
-      message: '后端返回了非 JSON 响应',
-      code: 'invalid_response',
-      status: response.status,
-    })
-  }
-
-  if (!response.ok || !payload.success) {
-    throw new ApiClientError({
-      message: payload?.error?.message ?? `上传失败（HTTP ${response.status}）`,
-      code: payload?.error?.code ?? 'http_error',
-      status: response.status,
-    })
-  }
-  return payload.data as T
+  return parseEnvelope<T>(response, path)
 }

@@ -34,7 +34,14 @@ class LLMRequest(BaseModel):
     messages: list[ChatMessage]
     model: str | None = Field(default=None, description="覆盖默认模型")
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=2000, gt=0)
+    # 单次生成上限（token）。None = 交给 client 的默认值
+    # （OpenAI 兼容 → Settings.llm_max_tokens；Ollama → OLLAMA_NUM_PREDICT）。
+    #
+    # [P0] 这里曾经写死 2000，导致 `LLM_MAX_TOKENS` / `OLLAMA_NUM_PREDICT`
+    # 成了**死配置**：图节点与 Agent 构造 LLMRequest 时都没有显式传这个字段，
+    # 于是无论 .env 配 4096 还是 8192，线上每一次调用实际都被 2000 截断 ——
+    # 表现为长报告 JSON 被腰斩、结构化解析失败、写完报告前的 repair 反复重试。
+    max_tokens: int | None = Field(default=None, gt=0)
 
     # 结构：{"type": "json_object"} 要求模型输出合法 JSON
     response_format: dict[str, Any] | None = None
@@ -44,6 +51,14 @@ class LLMRequest(BaseModel):
 
     # 追踪信息（task_id 等），只进日志，不进 prompt
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    # ---- 统一模型层新增（换模型时这几个字段是「适配面」）----
+    # 是否走流式。False 不影响正确性，只影响体感延迟；
+    # 不支持流式的 provider（Mock / 部分兼容层）会自动退化为一次性返回。
+    stream: bool = False
+    # 厂商私有参数透传（Ollama 的 num_ctx / keep_alive / think 等）。
+    # 放在这里而不是散进各处调用点，是为了让「换模型」只改 provider 一处。
+    options: dict[str, Any] = Field(default_factory=dict)
 
 
 class TokenUsage(BaseModel):
@@ -70,6 +85,9 @@ class LLMResponse(BaseModel):
     finish_reason: str | None = None
     # 厂商原始响应（调试用）；注意不要在这里放 API Key
     raw: dict[str, Any] | None = None
+    # 实际作答的 provider（ollama / openai-compatible / mock）。
+    # 有了它，UI 才能如实告诉用户「这次结论是本地 qwen3:8b 出的，还是云端兜底出的」。
+    provider: str = ""
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -80,3 +98,18 @@ class StructuredResult(BaseModel, Generic[T]):
 
     data: T
     response: LLMResponse
+
+
+class LLMStreamChunk(BaseModel):
+    """流式输出的一块。
+
+    为什么要单独定义、而不是直接 yield str：
+    调用方（SSE / 前端打字机）除了增量文本，还需要知道「什么时候结束」以及
+    「这次调用花了多少 token、耗时多少」。把收尾信息挂在最后一块上，
+    就能保持「一个异步迭代器走到底」的简单用法，不用再回调一次拿统计。
+    """
+
+    text: str = ""
+    done: bool = False
+    # 仅最后一块（done=True）携带：完整的响应对象（含 content 全文与 usage）
+    response: LLMResponse | None = None

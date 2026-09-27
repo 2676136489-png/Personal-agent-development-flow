@@ -220,7 +220,7 @@ def test_search_depth_is_validated_from_env(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_run_response_exposes_quota_fields(store: SearchQuotaStore):
-    response: Any = _to_response("thread_nope", {"question": "x" * 20}, interrupted=False)
+    response: Any = _to_response("thread_nope", {"question": "x" * 20}, next_nodes=())
     # 配额充裕时这些字段「在且为零」，前端只需要写一份渲染逻辑
     assert response.credits_used == 0
     assert response.search_calls == 0
@@ -234,7 +234,7 @@ def test_run_response_reports_this_runs_search_cost(store: SearchQuotaStore):
         res = store.reserve(depth="advanced", run_key="thread_cost")
         store.settle(res.reservation_id)
 
-    response: Any = _to_response("thread_cost", {"question": "x" * 20}, interrupted=False)
+    response: Any = _to_response("thread_cost", {"question": "x" * 20}, next_nodes=())
     assert response.search_calls == 3
     assert response.credits_used == 6
     assert response.degraded is False
@@ -245,7 +245,7 @@ def test_run_response_reports_degradation(store: SearchQuotaStore):
     res = store.reserve(depth="advanced", run_key="thread_degraded")
     store.release(res.reservation_id, degraded=True)
 
-    response: Any = _to_response("thread_degraded", {"question": "x" * 20}, interrupted=False)
+    response: Any = _to_response("thread_degraded", {"question": "x" * 20}, next_nodes=())
     assert response.degraded is True
     assert response.degraded_reason
     assert response.search_calls == 0  # 被拒的那次没产生真实调用

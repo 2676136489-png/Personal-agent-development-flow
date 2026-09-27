@@ -3,11 +3,41 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="AI 研究工作台：提一个问题，拿到一份每一步可见、每条结论可溯源的研究报告。"
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>AI Research Workspace</title>
+    <!-- 声明支持明暗两套配色；浏览器据此渲染表单控件/滚动条与地址栏 -->
+    <meta name="color-scheme" content="light dark" />
+    <!-- 移动端地址栏取色，与纸感底 / 深色底一致（令牌 --page 的两套值） -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2efe7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131412" />
+    <title>AI 研究工作台 · 有出处的研究报告</title>
+
+    <!--
+      字体：展示字 Fraunces（学术/期刊感）+ 正文 Public Sans + 数据 JetBrains Mono。
+      preconnect 提前建连，display=swap 避免首屏白字闪动；
+      离线时自动回落到系统 serif / sans / mono，不影响可用性。
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div id="root"></div>
+    <!-- 未启用 JS 的极少数场景：给出可读说明，而不是一片空白 -->
+    <noscript>
+      <div style="max-width: 520px; margin: 12vh auto; padding: 24px; font-family: system-ui, sans-serif; color: #1c1d19; background: #fbfaf6; border: 1px solid rgba(28,29,25,.12); border-radius: 14px;">
+        <h1 style="margin: 0 0 8px; font-size: 20px;">需要启用 JavaScript</h1>
+        <p style="margin: 0; line-height: 1.7; color: #5f6157;">
+          AI 研究工作台是一个交互式单页应用，请在浏览器中启用 JavaScript 后重新打开本页。
+        </p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

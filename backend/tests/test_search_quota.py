@@ -129,7 +129,8 @@ def test_reserve_is_atomic_and_rejects_overspend(quota: SearchQuotaStore):
     conn = sqlite3.connect(quota._db_path)  # noqa: SLF001
     try:
         conn.execute(
-            "UPDATE search_quota SET credits_used = 999 WHERE period_key = ?", (quota.current_period()[0],)
+            "UPDATE search_quota SET credits_used = 999 WHERE period_key = ?",
+            (quota.current_period()[0],),
         )
         conn.commit()
     finally:

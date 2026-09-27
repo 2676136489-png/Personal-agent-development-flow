@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel, ValidationError
 
+from app.core.config import get_settings
+from app.observability import metrics
 from app.search.errors import QuotaExhaustedError, SearchProviderError
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,20 @@ class ToolContext:
     # 工具可以把结构化产物放在这里（例如检索到的引用），
     # 由 execute() 统一收集进 ToolResult.citations
     artifacts: dict = field(default_factory=dict)
+
+
+class ToolError(Exception):
+    """工具内部**可分类**的失败。
+
+    携带 `error_kind`，由 `BaseTool.execute()` 翻译成 `ToolResult.error_kind`。
+    存在的意义：让非搜索类工具（如 fetch_webpage 的网络超时）也能给出
+    「timeout / network」这类**可被上层识别与重试**的信号，而不是被兜底成
+    无法区分的 `execution_error`（那会让「目标站点连不上」看起来像「代码 bug」）。
+    """
+
+    def __init__(self, message: str, *, error_kind: str) -> None:
+        super().__init__(message)
+        self.error_kind = error_kind
 
 
 class ToolResult(BaseModel):
@@ -72,6 +88,10 @@ class BaseTool(ABC):
     description: str
     args_schema: type[BaseModel]
     timeout_seconds: float = 10.0
+    # 是否参与「瞬时失败自动重试」（配置见 Settings.tool_max_attempts / retryable_tool_kinds）。
+    # 默认开启；**计费类工具（search_web）必须关掉**：一次超时/网络的瞬时失败若被重试，
+    # provider 会再预扣一笔 credits（超时保守不退款），等于一次逻辑搜索被重复扣费。
+    retryable: bool = True
 
     async def execute(self, raw_args: dict, ctx: ToolContext) -> ToolResult:
         """执行工具并保证不抛异常（除系统级错误外）。
@@ -87,6 +107,10 @@ class BaseTool(ABC):
         如果直接落到第 4 层，会被吞成 `execution_error` ——
         「额度耗尽」这个最关键的信号就丢了，上层只会看到「工具失败」，
         于是又去重试，继续烧积分（PRD P-1）。
+
+        [T-obs] 这里是**全项目唯一的工具调用收敛点**：所有工具都从 execute() 走，
+        所以指标（调用数 + 耗时直方图）只在这里记一次即可覆盖全部工具，
+        且记的是「一次逻辑调用（含重试）的最终结果」，不会被重试放大。
         """
         started = time.perf_counter()
 
@@ -96,8 +120,53 @@ class BaseTool(ABC):
             problems = "; ".join(
                 f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()[:3]
             )
-            return self._failure("invalid_args", f"参数不合法：{problems}", started)
+            return self._finish(self._failure("invalid_args", f"参数不合法：{problems}", started))
 
+        result = await self._run_with_retry(args, ctx, started)
+        return self._finish(result)
+
+    async def _run_with_retry(
+        self, args: BaseModel, ctx: ToolContext, started: float
+    ) -> ToolResult:
+        """按配置对「可重试的瞬时失败」做退避重试。
+
+        配置项（此前是死配置，从未被读取）：
+        - `tool_max_attempts`：最多尝试几次（含首次）
+        - `retryable_tool_kinds`：哪些 error_kind 值得重试
+          （默认 timeout / network / upstream_5xx / rate_limit）
+        - `tool_retry_backoff_min/max`：指数退避区间
+
+        `self.retryable=False`（计费工具）时只尝试一次。
+        """
+        settings = get_settings()
+        attempts = max(1, settings.tool_max_attempts) if self.retryable else 1
+        retryable_kinds = settings.retryable_tool_kinds_set
+
+        result = await self._attempt(args, ctx, started)
+        attempt_no = 1
+        while (
+            attempt_no < attempts
+            and not result.ok
+            and result.error_kind in retryable_kinds
+        ):
+            delay = min(
+                settings.tool_retry_backoff_max,
+                settings.tool_retry_backoff_min * (2 ** (attempt_no - 1)),
+            )
+            logger.warning(
+                "tool %s 第 %s 次失败（kind=%s），%.2fs 后重试",
+                self.name,
+                attempt_no,
+                result.error_kind,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            attempt_no += 1
+            result = await self._attempt(args, ctx, started)
+        return result
+
+    async def _attempt(self, args: BaseModel, ctx: ToolContext, started: float) -> ToolResult:
+        """执行一次工具逻辑，把各类异常翻译成统一的 ToolResult。"""
         try:
             output = await asyncio.wait_for(self._run(args, ctx), timeout=self.timeout_seconds)
         except QuotaExhaustedError as exc:
@@ -107,6 +176,10 @@ class BaseTool(ABC):
         except SearchProviderError as exc:
             # 上游限流/服务不可用：保留真实 error_kind，让上层决定要不要重试
             logger.warning("搜索失败 kind=%s：%s", exc.error_kind, exc)
+            return self._failure(exc.error_kind, str(exc), started)
+        except ToolError as exc:
+            # 工具自定义的可分类失败（如 fetch 的超时/网络）：保留 error_kind
+            logger.warning("tool %s 失败 kind=%s：%s", self.name, exc.error_kind, exc)
             return self._failure(exc.error_kind, str(exc), started)
         except TimeoutError:  # Python 3.11+ 起 asyncio.TimeoutError 就是内置 TimeoutError
             logger.warning("tool timeout: %s", self.name)
@@ -125,6 +198,12 @@ class BaseTool(ABC):
             duration_ms=duration_ms,
             citations=list(ctx.artifacts.get("citations", [])),
         )
+
+    def _finish(self, result: ToolResult) -> ToolResult:
+        """记指标并返回最终结果（含参数校验失败这一路径）。"""
+        metrics.inc(metrics.TOOL_CALLS_TOTAL, {"tool": self.name, "ok": result.ok})
+        metrics.observe(metrics.TOOL_DURATION_MS, float(result.duration_ms), {"tool": self.name})
+        return result
 
     @abstractmethod
     async def _run(self, args: BaseModel, ctx: ToolContext) -> str:

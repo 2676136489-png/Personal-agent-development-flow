@@ -9,7 +9,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from pydantic import BaseModel, Field, model_validator
+
+logger = logging.getLogger(__name__)
 
 
 class ToolCallRequest(BaseModel):
@@ -27,18 +31,35 @@ class AgentDecision(BaseModel):
     final_answer: str | None = None
 
     @model_validator(mode="after")
-    def _exactly_one_choice(self) -> AgentDecision:
-        """[P0] 必须二选一。
+    def _resolve_choice(self) -> AgentDecision:
+        """[P0] 把「既要又要 / 都不要」**收敛成一个确定选择**，能救则救。
 
-        为什么要这条校验：模型经常「既要又要」（同时给 action 和 final_answer）
-        或者「都不要」（两个都空）。前者会让我们白跑一轮，后者会让循环卡死。
-        校验失败会抛可重试错误，让模型重新生成一次，通常就好了。
+        线上实测：小模型（GLM-4-Flash 这类）经常违反「二选一」约束。此前这里直接
+        抛异常 → 整个节点失败 → 接口回一句"大模型调用失败"。把「模型不够听话」变成
+        「服务不可用」是不对的，所以改成：
+
+        - **同时给了 action 与 final_answer**：保留 `final_answer`、丢弃 `action`。
+          理由：模型已经产出了结论，丢掉它最可惜；提前结束这一步是**可恢复**的
+          （研究图里 verify→research 的回环会把证据不足打回来补查），
+          而丢掉答案在「强制收尾」路径上只能给用户一句占位文案。
+        - **两个都空**：无法凭空造出内容，抛**可重试**错误，
+          交由 `BaseLLMClient.complete_structured` 的 repair 重试再要一次。
+
+        无论走哪条，都只在 action / final_answer 恰好有一个时通过，下游 `has_action`
+        这类判断因此永远只看一个分支。
         """
         has_action = self.action is not None
         has_answer = bool(self.final_answer and self.final_answer.strip())
-        if has_action == has_answer:
+
+        if has_action and has_answer:
+            logger.warning(
+                "AgentDecision 同时给出 action 与 final_answer，已保留 final_answer、丢弃 action"
+            )
+            self.action = None
+        elif not has_action and not has_answer:
             raise ValueError(
-                "必须且只能选择一项：调用一个工具(action) 或 给出最终答案(final_answer)"
+                "必须二选一：要么调用一个工具(action)，要么给出最终答案(final_answer)；"
+                "当前两者都为空"
             )
         return self
 

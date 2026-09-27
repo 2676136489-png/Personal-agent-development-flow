@@ -7,9 +7,10 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.core.config import get_settings
+from app.core.middleware import RunBudgetRegistry, client_ip
 from app.core.responses import ApiResponse, success_response
 from app.search.quota import QuotaSnapshot, get_search_quota_or_none
 
@@ -41,8 +42,33 @@ async def get_settings_public() -> ApiResponse[dict]:
             "embedding_provider": settings.embedding_provider,
             "embedding_model": settings.embedding_model,
             "cors_origins": settings.cors_origins_list,
+            # 访问与额度：让「每日预算」从隐形拦截变成可见额度（设置页展示用）
+            "rate_limit_enabled": settings.rate_limit_enabled,
+            "rate_limit_requests_per_minute": settings.rate_limit_requests_per_minute,
+            "daily_run_budget_enabled": settings.daily_run_budget_enabled,
+            "daily_run_budget_per_ip": settings.daily_run_budget_per_ip,
         }
     )
+
+
+@router.get("/run-budget", summary="今日深度研究额度（当前访客）")
+async def get_run_budget(request: Request) -> ApiResponse[dict]:
+    """工作流提示与设置页「访问与额度」分组的数据源。
+
+    数据是预算中间件的**只读快照**（不改变计数）。预算未启用 / 注册表为空时返回
+    全零 + `enabled=false` 的降级快照（与 `/settings/usage` 同一套契约）：
+    数值全 0、HTTP 200，前端只需写一份渲染逻辑。
+    """
+    settings = get_settings()
+    registry: RunBudgetRegistry | None = getattr(
+        request.app.state, "run_budget_registry", None
+    )
+    snapshot = registry.snapshot(client_ip(request.scope)) if registry else None
+    if not settings.daily_run_budget_enabled or snapshot is None:
+        return success_response(
+            {"enabled": False, "limit": 0, "used": 0, "remaining": 0, "reset_at_ms": 0}
+        )
+    return success_response({"enabled": True, **snapshot})
 
 
 def _zero_usage() -> dict:

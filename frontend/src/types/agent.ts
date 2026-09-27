@@ -30,3 +30,28 @@ export interface AgentRunResult {
   latency_ms: number
   mock: boolean
 }
+
+/**
+ * [B39] 历史记录列表项 —— 只是**摘要**。
+ *
+ * 后端刻意不在列表里返回完整轨迹：一次运行的 steps + tool_calls 可达数十 KB，
+ * 列表只负责「让用户认得出是哪一次」，内容按 id 单独取。
+ */
+export interface AgentRunSummary {
+  id: string
+  question: string
+  finished_reason: string
+  provider: string
+  model: string
+  mock: boolean
+  latency_ms: number
+  created_at: string
+}
+
+/** 一条历史记录的完整内容（含当时的答案与轨迹）。 */
+export interface AgentRunRecord {
+  id: string
+  question: string
+  result: AgentRunResult | null
+  created_at: string
+}

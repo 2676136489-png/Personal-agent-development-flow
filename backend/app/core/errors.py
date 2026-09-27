@@ -10,6 +10,9 @@
 from __future__ import annotations
 
 import logging
+import traceback
+from collections import deque
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from fastapi import FastAPI, Request
@@ -62,6 +65,35 @@ def _error_payload(code: str, message: str, details: dict | list | None = None) 
     return response.model_dump()
 
 
+# ------------------------------ [B30] 最近错误环形缓冲 ------------------------------
+# 沙箱部署看不到进程日志文件；线上间歇性 500 的堆栈只能靠进程内存留底。
+# 只存异常类型/消息/堆栈尾部/请求路径，不含请求体（避免用户输入进诊断端点）。
+_RECENT_ERRORS: deque[dict] = deque(maxlen=20)
+
+
+def record_recent_error(request: Request, exc: Exception) -> None:
+    """把未处理异常记入环形缓冲，供 /api/debug/recent-errors 查看。"""
+    try:
+        stack_lines: list[str] = traceback.format_exception(exc)
+        _RECENT_ERRORS.appendleft(
+            {
+                "time": datetime.now(UTC).isoformat(),
+                "path": request.url.path,
+                "method": request.method,
+                "type": type(exc).__name__,
+                "message": str(exc)[:300],
+                # 堆栈太长只留尾部：根因帧几乎总在最后几帧
+                "stack_tail": "".join(stack_lines[-6:])[-1500:],
+            }
+        )
+    except Exception:  # noqa: BLE001 - 诊断记录本身绝不能抛
+        logger.debug("record_recent_error failed", exc_info=True)
+
+
+def recent_errors() -> list[dict]:
+    return list(_RECENT_ERRORS)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """把四类异常都转成统一响应格式。"""
 
@@ -111,6 +143,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
         # 兜底：记录完整堆栈到日志，但只把「发生了什么」告诉调用方，不泄露内部细节
         logger.exception("Unhandled exception: %s", exc)
+        # [B30] 同时落入进程内环形缓冲：沙箱环境看不到文件日志，
+        # /api/debug/recent-errors 是定位线上间歇性 500 的唯一窗口。
+        record_recent_error(request, exc)
         return JSONResponse(
             status_code=500,
             content=_error_payload(ErrorCode.INTERNAL_ERROR.value, "internal server error"),

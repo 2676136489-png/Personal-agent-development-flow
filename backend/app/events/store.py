@@ -36,7 +36,7 @@ class EventStore:
 
     def __init__(self, db_path: Path) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        self._conn = sqlite3.connect(str(db_path), check_same_thread=False, timeout=10)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
@@ -98,6 +98,22 @@ class EventStore:
                 (thread_id, *terminal_types),
             ).fetchone()
         return row is not None
+
+    def delete_for_thread(self, thread_id: str) -> int:
+        """删除某次运行的全部事件（与运行记录的删除配套，避免留下孤儿事件）。"""
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM events WHERE thread_id = ?", (thread_id,)
+            )
+            self._conn.commit()
+        return cursor.rowcount
+
+    def clear(self) -> int:
+        """清空全部事件（与运行记录的清空配套）。"""
+        with self._lock:
+            cursor = self._conn.execute("DELETE FROM events")
+            self._conn.commit()
+        return cursor.rowcount
 
 
 _STORE: EventStore | None = None

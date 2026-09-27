@@ -1,15 +1,25 @@
-import { useState } from 'react'
-import { runAgent } from '../../api/agent'
+import { useCallback, useEffect, useState } from 'react'
+import { deleteAgentRun, getAgentRun, listAgentRuns, runAgent } from '../../api/agent'
 import { ApiClientError } from '../../api/client'
+import { formatRelativeTime } from '../../lib/time'
 import { ChevronRightIcon } from '../../components/icons'
 import { StatusBadge } from '../../components/StatusBadge'
+import { PageHeader } from '../../components/PageHeader'
 import { CollapsibleCard } from '../../components/CollapsibleCard'
+import { Markdown } from '../../components/Markdown'
 import { ProcessTimeline, type ProcessTimelineItem } from '../../components/ProcessTimeline'
+import { Stepper, type StepItem } from '../../components/Stepper'
 import { ToolCallCard } from '../../components/ToolCallCard'
 import { EmptyState } from '../../components/EmptyState'
 import { LoadingState } from '../../components/LoadingState'
 import { ErrorState } from '../../components/ErrorState'
-import type { AgentRunResult, AgentStepRecord, ToolCallRecord } from '../../types/agent'
+import { notify } from '../../components/Toast'
+import type {
+  AgentRunResult,
+  AgentRunSummary,
+  AgentStepRecord,
+  ToolCallRecord,
+} from '../../types/agent'
 
 const EXAMPLE_QUESTION = '向量数据库有哪些主流选择？各自适用场景是什么？'
 
@@ -41,12 +51,34 @@ export function AgentRunner() {
   const [question, setQuestion] = useState('')
   const [maxSteps, setMaxSteps] = useState(6)
   const [state, setState] = useState<RunState>({ status: 'idle' })
+  // [B39] 历史记录：用户之前问过的问题（与深度研究 / 研究规划的历史对齐）
+  const [history, setHistory] = useState<AgentRunSummary[]>([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [openId, setOpenId] = useState<string | null>(null)
+
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      setHistory(await listAgentRuns())
+    } catch {
+      // 历史列表是辅助读路径，拉取失败不阻塞主流程（与后端降级策略一致）
+      setHistory([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshHistory()
+  }, [refreshHistory])
 
   async function handleRun() {
     setState({ status: 'running' })
+    setOpenId(null)
     try {
       const data = await runAgent({ question, maxSteps })
       setState({ status: 'ok', data })
+      void refreshHistory()
     } catch (error) {
       if (error instanceof ApiClientError) {
         setState({ status: 'error', message: error.message, code: error.code })
@@ -56,19 +88,48 @@ export function AgentRunner() {
     }
   }
 
+  /** 回看一条历史记录：直接还原当时的答案与轨迹，不重新跑一次 */
+  async function handleOpenHistory(record: AgentRunSummary) {
+    setOpenId(record.id)
+    try {
+      const full = await getAgentRun(record.id)
+      if (!full.result) {
+        notify({ tone: 'error', title: '记录内容已损坏', desc: '这条记录读不出有效结果，可删除它。' })
+        return
+      }
+      setQuestion(full.question)
+      setState({ status: 'ok', data: full.result })
+    } catch (error) {
+      const message = error instanceof ApiClientError ? error.message : '读取失败'
+      notify({ tone: 'error', title: '打开历史失败', desc: message })
+    }
+  }
+
+  async function handleDeleteHistory(recordId: string) {
+    try {
+      await deleteAgentRun(recordId)
+      setHistory((prev) => prev.filter((item) => item.id !== recordId))
+      if (openId === recordId) setOpenId(null)
+    } catch (error) {
+      const message = error instanceof ApiClientError ? error.message : '删除失败'
+      notify({ tone: 'error', title: '删除失败', desc: message })
+    }
+  }
+
   const canRun = question.trim().length >= 8 && state.status !== 'running'
 
   return (
     <section className="page">
-      <header className="page__head panel__header">
-        <div>
-          <p className="eyebrow">智能体工作台</p>
-          <h2 className="panel__title">让智能体自己跑研究</h2>
-          <p className="panel__subtitle">
-            输入一个研究任务，智能体自主决定调用哪些工具——联网搜索、抓取网页、计算，并把每一条结论都附上来源。
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="智能体工作台"
+        title="让智能体自己跑研究"
+        lede="输入一个研究任务，智能体自主决定调用哪些工具——联网搜索、抓取网页、计算，并把每一条结论都附上来源。"
+        notes={[
+          { term: '能做什么', desc: '一次问答内自主决定"要不要搜、搜什么、要不要读正文"，直接给带引用的答案。' },
+          { term: '怎么用', desc: '输入任务 → 看它逐步调用工具 → 拿到最终答案与引用。' },
+          { term: '与深度研究的区别', desc: '这里一路跑到出答案，不会中途等你确认；想要把关请用「深度研究」。' },
+        ]}
+      />
 
       {/* ============ 主操作区（首屏必达） ============ */}
       <section className="page__primary">
@@ -142,6 +203,60 @@ export function AgentRunner() {
         )}
       </section>
 
+      {/* ============ 历史记录：用户之前问过的问题（与深度研究 / 研究规划对齐） ============ */}
+      <section className="page__status">
+        <section className="activity">
+          <div className="activity__head">
+            <h3 className="activity__title">历史记录</h3>
+            <button
+              className="link-button"
+              onClick={() => void refreshHistory()}
+              disabled={historyLoading}
+            >
+              {historyLoading ? '刷新中…' : '刷新'}
+            </button>
+          </div>
+
+          {historyLoading && history.length === 0 && <LoadingState variant="list" rows={3} />}
+
+          {!historyLoading && history.length === 0 && (
+            <EmptyState
+              title="还没有历史记录"
+              description="跑成功的 Agent 会自动保存在这里，点一条即可回看当时的答案与执行轨迹。"
+            />
+          )}
+
+          {history.length > 0 && (
+            <ul className="run-list">
+              {history.map((record) => (
+                <li key={record.id} className="run-list__item">
+                  <button
+                    className="run-list__btn"
+                    data-active={openId === record.id || undefined}
+                    onClick={() => void handleOpenHistory(record)}
+                    title="点击回看这一次运行"
+                  >
+                    <StatusBadge variant={FINISH_VARIANT[record.finished_reason] ?? 'info'}>
+                      {FINISH_REASON_LABEL[record.finished_reason] ?? record.finished_reason}
+                    </StatusBadge>
+                    <span className="run-list__q">{record.question}</span>
+                    <span className="hint">{formatRelativeTime(record.created_at)}</span>
+                  </button>
+                  <button
+                    className="run-list__delete"
+                    aria-label="删除这条记录"
+                    title="删除这条记录"
+                    onClick={() => void handleDeleteHistory(record.id)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </section>
+
       {/* ============ 折叠说明区（沉底，默认收起） ============ */}
       <section className="page__aside">
         <details className="fold card--fold">
@@ -154,6 +269,12 @@ export function AgentRunner() {
               <p>
                 「智能体」是一个<strong>端到端的自主研究执行器</strong>。你只需给出一个研究任务，智能体会自己决定什么时候搜索、抓取网页、调用什么工具，
                 并在达到足够证据后给出带引用来源的最终答案。它适合希望一次性拿到结论、同时保留可追溯执行过程的场合。
+              </p>
+              <p>
+                <strong>为什么联网搜索走 Tavily 而不是让大模型"自己上网"？</strong>
+                模型自带的联网能力是一个黑盒：搜了什么、看了哪些网页、结论依据哪条来源，外部都无从核对。
+                这里把搜索交给独立的 Tavily 检索服务，每一步调用都会留下结构化记录（查询词、命中的标题/链接/摘要、耗时），
+                结论才能逐条溯源，检索配额也可度量、可控制——这是"可审计的研究"和"凭感觉回答"的区别。
               </p>
             </div>
             <div className="module-section__grid">
@@ -203,8 +324,42 @@ export function AgentRunner() {
 function RunView({ data }: { data: AgentRunResult }) {
   const timelineItems: ProcessTimelineItem[] = data.steps.map((step) => buildStepItem(step))
 
+  // 三阶段骨架：与「深度研究」的 Stepper 视觉同源，但固定为 理解 → 执行工具 → 给出答案
+  // （Agent 循环没有固定阶段数，硬套七步会宽度乱跳）。下方仍保留逐步执行轨迹。
+  const answerStage: StepItem['status'] =
+    data.finished_reason === 'final_answer' || data.finished_reason === 'max_steps_reached'
+      ? 'done'
+      : 'error'
+  const stageItems: StepItem[] = [
+    { key: 'understand', label: '理解任务', status: 'done' },
+    {
+      key: 'tools',
+      label: '执行工具',
+      status: 'done',
+      count: data.tool_calls.length || undefined,
+    },
+    { key: 'answer', label: '给出答案', status: answerStage },
+  ]
+  const stageCaption =
+    data.finished_reason === 'final_answer'
+      ? '智能体已给出带引用的结论。'
+      : data.finished_reason === 'llm_error'
+        ? '模型调用失败，未能生成最终答案。'
+        : data.finished_reason === 'timeout'
+          ? '执行超时，未跑完即停止。'
+          : '已达到最大步数，下面是当前已有结论。'
+
   return (
     <div className="result-stack">
+      <div className="card card--pad">
+        <div className="plan__heading">执行概览</div>
+        <Stepper
+          items={stageItems}
+          caption={stageCaption}
+          captionBadge={FINISH_REASON_LABEL[data.finished_reason] ?? data.finished_reason}
+        />
+      </div>
+
       <div className="card card--interactive">
         <div className="run-card__head">
           <h3 className="run-card__title">运行结果</h3>
@@ -239,7 +394,11 @@ function RunView({ data }: { data: AgentRunResult }) {
       </div>
 
       <CollapsibleCard title="最终答案" defaultOpen>
-        <div className="answer-card">{data.answer}</div>
+        {/* [B23] 答案必须走 Markdown：模型按契约输出小节/列表/加粗，
+            纯文本渲染会把格式糊成一坨、换行也丢失 —— 这就是"答案太简单"观感的来源之一。 */}
+        <div className="answer-card">
+          <Markdown>{data.answer}</Markdown>
+        </div>
       </CollapsibleCard>
 
       {data.citations.length > 0 && (

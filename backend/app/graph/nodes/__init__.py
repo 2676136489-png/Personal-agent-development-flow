@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import time
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -24,30 +26,216 @@ from app.core.security import wrap_untrusted_block
 from app.events.bus import emit
 from app.events.schemas import EventType
 from app.graph import prompts
-from app.graph.nodes.common import NodeDeps, resolve_deps
+from app.graph.nodes.common import resolve_deps
 from app.graph.schemas import (
     AnalysisResult,
     ResearchReport,
     TaskUnderstanding,
     VerificationResult,
 )
+from app.graph.sources import (
+    KB_MIN_SCORE,
+    build_knowledge_sources,
+    citation_score,
+    dedupe_sources,
+    is_relevant_citation,
+    parse_web_sources,
+)
 from app.graph.state import ResearchState
-from app.llm.client import LLMClient, get_llm_client
+from app.llm.client import LLMClient
 from app.llm.errors import LLMError
 from app.llm.schemas import LLMRequest
+from app.rag.embeddings import embeddings_have_semantic_power
 from app.schemas.research import ResearchPlan
 from app.tools.base import ToolContext
-from app.tools.registry import ToolRegistry, build_default_registry
+from app.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
-_EVIDENCE_PREVIEW = 600
+# [B21] 证据预览从 600 提到 1200：write/analyze 节点需要足够的原文素材才能写出
+# 有细节的报告；600 字截断常把一条证据拦腰切断，模型只能复述半截信息。
+# GLM-4-Flash 的 128k 上下文完全吃得下，成本可控。
+_EVIDENCE_PREVIEW = 1200
 _ARGS_SNAPSHOT_CHARS = 500
+
+
+def _short(text: str | None, limit: int = 24) -> str:
+    """来源标签用的短标题（太长会淹没证据正文本身）。"""
+    value = (text or "").strip().replace("\n", " ")
+    return value if len(value) <= limit else value[: limit - 1] + "…"
+
+
+def _kb_label(citations: list[dict]) -> str:
+    """知识库证据的来源标签：优先用命中的那份文档名。
+
+    [B35] 之前 evidence 只有 `[知识库]` + 正文，模型写出一个「实例」时
+    无从标注它出自哪份文档，用户也就看不出实例与研究内容对不上。
+    把文档名写进标签，可追溯性就落在证据本身上，而不是靠模型自觉。
+    """
+    for citation in citations:
+        name = str(citation.get("filename") or "").strip()
+        if name:
+            return f"知识库《{_short(name, 30)}》"
+    return "知识库"
+
+
+# [B38] 知识库相关度门槛统一放在 `app/graph/sources.py`
+# —— 那里是「知识库来源」的唯一构造点，规则只有一份。
+# ⚠️ 门槛必须对**所有**写入 citations/evidence 的路径生效。之前只有
+# `retrieve_node` 用了它，`research_node`（LLM 自主选工具的链路）没有 ——
+# 于是 0.32 / 0.31 分的片段照样出现在「引用来源」里。
+_KB_MIN_SCORE = KB_MIN_SCORE
+
+
+def knowledge_base_is_trustworthy() -> bool:
+    """[B38] 现在能不能把知识库检索结果当作**依据**？
+
+    只在一个条件下说「不能」：向量没有语义能力（本地哈希兜底），
+    且配置要求语义（`rag_semantic_required`，默认 True）。
+
+    注意这**不是**「禁用知识库」：知识库页面照常可用，用户也能检索浏览；
+    被拦住的只是「拿它当研究证据」——因为字面匹配的检索结果无法区分
+    相关与不相关，写进报告就是污染。
+    """
+    if not get_settings().rag_semantic_required:
+        return True
+    try:
+        return embeddings_have_semantic_power()
+    except Exception:  # noqa: BLE001 - 判断不出来就保守处理
+        return False
+
+
+def _kb_unusable_reason() -> str:
+    return (
+        "当前向量检索没有语义能力（EMBEDDING_PROVIDER 回退为本地哈希向量），"
+        "无法区分「相关」与「字面重叠」，故不采用知识库作为研究依据；"
+        "本问题改用联网搜索。配置真实 embedding 模型后知识库会自动恢复参与。"
+    )
+
+
+def _relevant_kb_citations(citations: list[dict]) -> list[dict]:
+    """只保留达到相关度门槛的知识库片段。"""
+    return [citation for citation in citations if is_relevant_citation(citation)]
+
+
+def _top_kb_score(citations: list[dict]) -> float:
+    if not citations:
+        return 0.0
+    return max(citation_score(citation) for citation in citations)
+
+
+def _web_label(sources: list[dict]) -> str:
+    """联网证据的来源标签：用真实网页标题，不用「联网搜索」这种无信息量的前缀。"""
+    titles = [str(item.get("title") or "").strip() for item in sources[:3]]
+    titles = [title for title in titles if title]
+    if not titles:
+        return "联网搜索"
+    return "联网搜索：" + " / ".join(_short(title, 20) for title in titles)
+
 
 # [A8] 只有完全由我们本地生成、不含任何外部内容的工具可以免标记。
 # 其余（联网搜索 / 网页抓取 / 知识库文档）一律当作不可信数据包裹后再进上下文：
 # 知识库文档虽然由用户上传，但仍可能来自第三方，不能默认可信。
 _TRUSTED_TOOLS = frozenset({"calculate"})
+
+# [P1] retrieve 节点每轮最多覆盖几个子问题。
+# 上限 3 是「覆盖度 vs 搜索额度」的平衡：SEARCH_QUOTA_PER_RUN_CAP 是 12，
+# 而一次 run 里 retrieve 最多被调用 3 次（初次 + 两次回炉）。
+_RETRIEVE_MAX_QUERIES = 3
+# 注入 research prompt 的「待补充清单」条数上限
+_PENDING_LIMIT = 6
+# 注入 research prompt 的「已执行动作」条数上限
+_EXECUTED_ACTIONS_LIMIT = 8
+_EXECUTED_ARGS_CHARS = 120
+
+
+def _pick_retrieve_queries(state: ResearchState) -> list[str]:
+    """挑出本轮检索要覆盖的子问题清单。
+
+    [P1] 此前 retrieve 只检索 `key_questions[0]` 一条 query —— 任务理解拆出的
+    子问题里只有一个会被覆盖，这正是「深度研究不深」最直接的根因。现在：
+    1. 优先用 `understanding.key_questions`（任务理解产出的子问题清单）；
+    2. 为空时回退计划目标 / 原始问题，保证永远至少有一条 query；
+    3. 按 verify_attempts 滚动窗口 —— 回炉后的下一轮先搜还没搜过的子问题，
+       而不是每轮都从第 1 条重来。
+    """
+    understanding = state.get("understanding") or {}
+    candidates = [
+        str(item).strip()
+        for item in (understanding.get("key_questions") or [])
+        if str(item).strip()
+    ]
+    if not candidates:
+        goal = (state.get("plan") or {}).get("goal") or state["question"]
+        candidates = [str(goal).strip()]
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for item in candidates:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+
+    offset = (state.get("verify_attempts") or 0) * _RETRIEVE_MAX_QUERIES
+    offset %= len(unique)
+    rotated = unique[offset:] + unique[:offset]
+    return rotated[:_RETRIEVE_MAX_QUERIES]
+
+
+def _pending_questions(state: ResearchState) -> list[str]:
+    """汇总「还缺什么」：verify 的 missing/reasons + analyze 的 gaps。
+
+    [P1] 回炉循环（verify needs_more → research）此前完全不把这些缺口
+    交给模型，补充研究只能盲目重搜。这里去重后注入 research 的 prompt。
+    """
+    items: list[str] = []
+    verification = state.get("verification") or {}
+    # 只有判定「证据不足」时，missing/reasons 才是待办；pass 的 reasons 是解释性的
+    if verification.get("verdict") and verification.get("verdict") != "pass":
+        items.extend(str(item) for item in (verification.get("missing") or []))
+        items.extend(str(item) for item in (verification.get("reasons") or []))
+    analysis = state.get("analysis") or {}
+    items.extend(str(item) for item in (analysis.get("gaps") or []))
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        text = item.strip()
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        result.append(text[:200])
+    return result[:_PENDING_LIMIT]
+
+
+def _executed_actions(state: ResearchState) -> list[str]:
+    """最近几条已执行动作的「工具(参数)」摘要。
+
+    [P1] 没有这份清单时，模型在回炉轮会反复用同一个 query 搜同一件事。
+    """
+    actions: list[str] = []
+    for call in (state.get("tool_calls") or [])[-_EXECUTED_ACTIONS_LIMIT:]:
+        args = json.dumps(call.get("args") or {}, ensure_ascii=False)
+        if len(args) > _EXECUTED_ARGS_CHARS:
+            args = args[:_EXECUTED_ARGS_CHARS] + "…"
+        status = "" if call.get("ok", True) else "（失败）"
+        actions.append(f"{call.get('tool', '未知工具')}({args}){status}")
+    return actions
+
+
+def _tool_call_entry(result: Any, args: dict) -> dict:
+    """工具调用落库记录（retrieve 节点用），字段与 research 节点保持同一口径。"""
+    return {
+        "tool": result.tool,
+        "args": args,
+        "ok": result.ok,
+        "error": result.error,
+        "error_kind": result.error_kind,
+        "duration_ms": result.duration_ms,
+    }
 
 
 def _safe_args(args: object) -> dict:
@@ -245,6 +433,9 @@ async def research_node(state: ResearchState, config: RunnableConfig) -> dict:
                 tool_schemas=registry.function_schemas(),
                 evidence=state.get("evidence", []),
                 plan=state.get("plan"),
+                # [P1] 回炉轮的两个关键输入：还缺什么、已经做过什么
+                pending_questions=_pending_questions(state),
+                executed=_executed_actions(state),
             ),
             AgentDecision,
             "research_decision",
@@ -276,6 +467,39 @@ async def research_node(state: ResearchState, config: RunnableConfig) -> dict:
     action = decision.action
     if action is None:
         return _failed("模型既没有选择工具也没有给出结论")
+
+    # [B38] LLM 可能自己挑中知识库。向量无语义能力时不能让它当依据用 ——
+    # 字面匹配的结果会把无关片段带进证据链，正是用户反馈的那个问题。
+    # 这里拒绝并把原因写进观察，让模型下一轮改走联网搜索。
+    if action.tool == "search_knowledge_base" and not knowledge_base_is_trustworthy():
+        emit(
+            thread_id,
+            EventType.TOOL_COMPLETED,
+            {
+                "tool": action.tool,
+                "ok": False,
+                "error_kind": "blocked",
+                "error": "知识库检索缺语义能力，本轮不可作为依据",
+            },
+        )
+        return {
+            "iteration": state.get("iteration", 0) + 1,
+            "failure_streak": 0,
+            "research_done": False,
+            "evidence": [f"[知识库] {_kb_unusable_reason()}"],
+            "tool_calls": [
+                {
+                    "tool": action.tool,
+                    "args": _safe_args(action.args),
+                    "ok": False,
+                    "error": "知识库检索缺语义能力",
+                    "error_kind": "blocked",
+                    "duration_ms": 0,
+                }
+            ],
+            "steps": [_step("research", "知识库不可用（缺语义能力），改走联网搜索")],
+            "usage": [usage_record],
+        }
 
     ctx = ToolContext(
         run_id=str((config or {}).get("configurable", {}).get("thread_id", "graph")),
@@ -340,8 +564,7 @@ async def research_node(state: ResearchState, config: RunnableConfig) -> dict:
             evidence_text = f"[内部工具] {observation[:_EVIDENCE_PREVIEW]}"
         else:
             evidence_text = (
-                f"[{action.tool}] "
-                f"{wrap_untrusted_block(observation[:_EVIDENCE_PREVIEW])}"
+                f"[{action.tool}] {wrap_untrusted_block(observation[:_EVIDENCE_PREVIEW])}"
             )
     else:
         evidence_text = None
@@ -364,103 +587,177 @@ async def research_node(state: ResearchState, config: RunnableConfig) -> dict:
         "steps": [_step("research", f"{result.tool}：{result.summary}")],
         "usage": [usage_record],
     }
-    if result.citations:
-        update["citations"] = result.citations
+    # [B38] 知识库结果按相关度过滤 —— 与 retrieve_node 用同一条门槛。
+    # 不过滤的话，LLM 只要选了 search_knowledge_base，0.2~0.3 分的沾边片段
+    # 就会直接进「引用来源」，用户看到的引用与研究问题完全对不上。
+    relevant_citations = _relevant_kb_citations(result.citations or [])
+    if result.citations and not relevant_citations:
+        # 全部弱相关：不记引用、不把沾边正文塞进证据，改为给模型一句明确的
+        # 事实信号，让它在下一轮改走联网搜索，而不是拿这些材料硬写结论。
+        best = _top_kb_score(result.citations)
+        asked = str((action.args or {}).get("query") or state.get("question") or "")
+        evidence_text = (
+            f"[知识库] 知识库中没有与该查询足够相关的内容"
+            f"（最高相关度 {best:.2f}，低于门槛 {_KB_MIN_SCORE}）。"
+            f"请改用联网搜索等其他途径获取信息，不要依据无关片段作答。"
+        )
+        logger.info(
+            "research 节点：知识库结果全为弱相关（query=%s，最高 %.2f），已丢弃",
+            asked[:60],
+            best,
+        )
+
+    if relevant_citations:
+        update["citations"] = relevant_citations
+        update["sources"] = dedupe_sources(build_knowledge_sources(relevant_citations))
+    if result.ok and result.tool == "search_web":
+        # 联网搜索的结构化来源：在这里解析，别让前端去 parse 一段可能被截断的 JSON
+        update["sources"] = dedupe_sources(parse_web_sources(result.output))
     if evidence_text:
         update["evidence"] = [evidence_text]
     return update
 
 
 async def retrieve_node(state: ResearchState, config: RunnableConfig) -> dict:
-    """固定动作：先查自己的知识库，知识库没命中时回退到真实联网搜索。
+    """固定动作：对每个关键子问题，先查自己的知识库，未命中再回退真实联网搜索。
 
     这里不需要 LLM 决策（规则驱动），所以直接调用工具。
-    当知识库为空或未命中时，自动调用 search_web 拿到真实网页证据，
-    保证研究工作流「默认就走真实联网」，而不只是查私有资料。
+
+    [P1] 此前只检索 `key_questions[0]` **一条** query：任务理解拆出的子问题里
+    只有一个会被覆盖，这正是「深度研究不深」最直接的根因。现在按子问题逐个检索，
+    每个子问题都是「知识库优先、未命中才联网」—— 命中知识库的子问题不再消耗
+    搜索额度；回炉轮通过 verify_attempts 滚动起点，优先补搜没搜过的子问题。
     """
     thread_id = _thread_id(config)
     _, registry = _deps(config)
     settings = get_settings()
 
-    understanding = state.get("understanding") or {}
-    questions = understanding.get("key_questions") or []
-    query = questions[0] if questions else state["question"]
-
+    queries = _pick_retrieve_queries(state)
     ctx = ToolContext(
         run_id=str((config or {}).get("configurable", {}).get("thread_id", "graph")),
         max_output_chars=settings.tool_output_max_chars,
         # [B15] 之前这里漏了 allowed_domains，导致域名白名单在 retrieve 节点失效
         allowed_domains=settings.fetch_allowed_domains_list,
     )
-    emit(thread_id, EventType.RETRIEVAL_STARTED, {"query": query, "top_k": 3})
+    # [P1] 保留 query 字段（= 首个查询）：前端事件文案读的是 p.query
+    emit(
+        thread_id,
+        EventType.RETRIEVAL_STARTED,
+        {"query": queries[0], "queries": queries, "top_k": 3},
+    )
 
+    started = time.perf_counter()
     evidence: list[str] = []
     tool_calls: list[dict] = []
-    citations = None
+    citations: list[dict] = []
+    sources: list[dict] = []
+    total_duration_ms = 0
+    kb_hits = 0
 
-    # 1) 先查知识库
-    try:
-        kb_tool = registry.get("search_knowledge_base")
-        kb_result = await kb_tool.execute({"query": query, "top_k": 3}, ctx)
-    except Exception:
+    # [B34] 相关度门槛：向量检索返回的是「最不坏的那条」，不是「真的相关」。
+    # score 0.2~0.3 的弱相关片段（例如知识库里只有主题沾边的示例文档）会
+    # 把联网检索挡在门外，还污染证据与结论 —— 用户看到的引用与研究问题
+    # 驴唇不对马嘴。只有最高分达到门槛才算「命中」。
+    # [B38] 门槛提到模块级 `_KB_MIN_SCORE`，research_node 共用同一条规则。
+    kb_min_score = _KB_MIN_SCORE
+
+    # [B38] 检索能力守卫：向量无语义能力时，知识库结果不可用作依据。
+    # 用户反复反馈「引用里全是不相干的内容」—— 根因就在这里（见 _kb_unusable_reason）。
+    kb_usable = knowledge_base_is_trustworthy()
+    if not kb_usable:
+        logger.info("知识库本轮不参与：%s", _kb_unusable_reason())
+
+    for query in queries:
+        # 1) 先查知识库（命中即止，该子问题不再联网）
         kb_result = None
+        kb_args = {"query": query, "top_k": 3}
+        if kb_usable:
+            try:
+                kb_tool = registry.get("search_knowledge_base")
+                kb_result = await kb_tool.execute(kb_args, ctx)
+            except Exception:  # 知识库不可用不应阻断整个研究工作流
+                kb_result = None
 
-    if kb_result and kb_result.ok and kb_result.citations:
-        citations = kb_result.citations
-        evidence.append(f"[知识库] {kb_result.output[:_EVIDENCE_PREVIEW]}")
-        tool_calls.append(
-            {
-                "tool": kb_result.tool,
-                "args": {"query": query, "top_k": 3},
-                "ok": kb_result.ok,
-                "error": kb_result.error,
-                "error_kind": kb_result.error_kind,
-                "duration_ms": kb_result.duration_ms,
-            }
-        )
+        kb_scores = [float(c.get("score") or 0) for c in (kb_result.citations if kb_result else [])]
+        kb_relevant = bool(kb_scores) and max(kb_scores) >= kb_min_score
 
-    # 2) 知识库没命中 → 回退真实联网搜索（search_web 背后已是 Tavily）
-    if not citations:
+        if kb_result is not None and kb_result.ok and kb_result.citations and kb_relevant:
+            kb_hits += 1
+            total_duration_ms += kb_result.duration_ms
+            # [B38] 只收达标片段。top_k=3 时同批返回的往往还有 0.2~0.3 分的
+            # 沾边片段 —— 只要最高的那条过了门槛就整批收下，正是用户看到
+            # 「相关度 0.32 / 0.31」出现在引用来源里的原因。
+            accepted = _relevant_kb_citations(kb_result.citations)
+            citations.extend(accepted)
+            tool_calls.append(_tool_call_entry(kb_result, kb_args))
+            # [A8] 知识库文档同样可能来自第三方，统一按不可信数据包裹后再进上下文
+            # [B35] 标签里带上命中的文档名，证据才可追溯到「哪一份材料」
+            evidence.append(
+                f"[{_kb_label(accepted)}] "
+                f"{wrap_untrusted_block(kb_result.output[:_EVIDENCE_PREVIEW])}"
+            )
+            continue
+
+        if kb_result is not None and kb_result.ok and kb_result.citations and not kb_relevant:
+            # 弱相关被拒：如实记一条工具调用，用户在时间线里能看到「为何走了联网」
+            logger.info(
+                "知识库弱相关被拒（max_score=%.2f < %.2f），该子问题回退联网",
+                max(kb_scores),
+                kb_min_score,
+            )
+            tool_calls.append(_tool_call_entry(kb_result, kb_args))
+
+        # 2) 知识库没命中 → 回退真实联网搜索（search_web 背后已是 Tavily）
+        web_args = {"query": query, "max_results": 3}
+        web_result = None
         try:
             web_tool = registry.get("search_web")
-            web_result = await web_tool.execute({"query": query, "max_results": 3}, ctx)
+            web_result = await web_tool.execute(web_args, ctx)
         except Exception:
             web_result = None
-        if web_result and web_result.ok:
+        if web_result is None:
+            continue
+        # 失败也落一条记录：让使用者看得到「尝试过但没有结果」
+        tool_calls.append(_tool_call_entry(web_result, web_args))
+        total_duration_ms += web_result.duration_ms
+        if web_result.ok:
+            # 网页结果在这里解析成结构化来源，别让前端去 parse 可能被截断的 JSON
+            web_sources = parse_web_sources(web_result.output)
             evidence.append(
-                f"[联网搜索] {wrap_untrusted_block(web_result.output[:_EVIDENCE_PREVIEW])}"
+                f"[{_web_label(web_sources)}] "
+                f"{wrap_untrusted_block(web_result.output[:_EVIDENCE_PREVIEW])}"
             )
-            tool_calls.append(
-                {
-                    "tool": web_result.tool,
-                    "args": {"query": query, "max_results": 3},
-                    "ok": web_result.ok,
-                    "error": web_result.error,
-                    "error_kind": web_result.error_kind,
-                    "duration_ms": web_result.duration_ms,
-                }
-            )
+            sources = dedupe_sources([*sources, *web_sources])
 
-    primary = kb_result if citations else web_result
-    used_source = "知识库" if citations else ("联网搜索" if evidence else "无命中")
+    used_source = "知识库" if kb_hits else ("联网搜索" if sources else "无命中")
+    step_summary = f"{used_source}：覆盖 {len(queries)} 个子问题，证据 +{len(evidence)}"
+    if not kb_usable:
+        # 在时间线里明说「为什么这次没用知识库」，否则用户会以为是漏检
+        step_summary += "（知识库未参与：检索缺语义能力）"
     emit(
         thread_id,
         EventType.RETRIEVAL_COMPLETED,
         {
-            "ok": bool(citations or evidence),
-            "hits": len(citations or []),
-            "duration_ms": primary.duration_ms if primary else 0,
-            "output_summary": primary.summary if primary else "无命中",
+            "ok": bool(evidence),
+            "hits": len(citations) + len(sources),
+            "queries": queries,
+            "kb_hits": kb_hits,
+            "kb_usable": kb_usable,
+            "duration_ms": total_duration_ms or int((time.perf_counter() - started) * 1000),
+            "output_summary": f"覆盖 {len(queries)} 个子问题，新增 {len(evidence)} 段证据",
             "source": used_source,
         },
     )
 
     update: dict = {
         "tool_calls": tool_calls,
-        "steps": [_step("retrieve", f"{used_source}：补充证据")],
+        "steps": [_step("retrieve", step_summary)],
     }
     if citations:
         update["citations"] = citations
+        update["sources"] = dedupe_sources([*build_knowledge_sources(citations), *sources])
+    elif sources:
+        update["sources"] = sources
     if evidence:
         update["evidence"] = evidence
     return update
@@ -507,7 +804,9 @@ async def verify_node(state: ResearchState, config: RunnableConfig) -> dict:
             prompts.verify_messages(
                 state["question"],
                 analysis,
-                len(state.get("evidence", [])),
+                # [P1] 传证据正文而不是条数：核查员必须能逐条核对
+                # findings 里标注的 [证据N] 是否真实、是否真的支持该结论
+                state.get("evidence", []),
             ),
             VerificationResult,
             "verify",
@@ -542,12 +841,27 @@ async def write_node(state: ResearchState, config: RunnableConfig) -> dict:
                 state.get("analysis") or {},
                 state.get("evidence", []),
                 state.get("feedback"),
+                plan=state.get("plan"),
+                # [P1] 注入来源清单：报告要点名出处时只能用清单里的真实来源
+                sources=state.get("sources"),
             ),
             ResearchReport,
             "write",
         )
     except LLMError as exc:
         return _failed(f"撰写报告失败：{exc.message}")
+
+    # [B35] 溯源兜底：报告正文若一个 [证据N] 都没标，说明写出来的实例
+    # 无法对应到任何依据 —— 与其静默交付一份「看起来像那么回事」的报告，
+    # 不如如实写进 limitations，让用户知道哪些结论未经证据核对。
+    body = data.summary or ""
+    body += "".join(section.content or "" for section in data.sections)
+    if not re.search(r"\[证据\s*\d+\]", body):
+        data.limitations = [
+            *(data.limitations or []),
+            "报告正文未标注任何 [证据N] 出处，其中的实例与数据未经证据核对，引用前请人工核验来源。",
+        ]
+        logger.warning("research thread=%s: 报告未标注证据编号，已写入 limitations", thread_id)
 
     return {
         "report": data.model_dump(),

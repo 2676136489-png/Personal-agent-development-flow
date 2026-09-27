@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import logging
+
+from fastapi import APIRouter, Depends, Query
 
 from app.core.errors import AppError, ErrorCode
 from app.core.responses import ApiResponse, success_response
+from app.graph.plan_store import get_plan_store
 from app.llm.client import LLMClient, get_llm_client
 from app.llm.errors import LLMError
 from app.schemas.research import PlanRequest, PlanResponse
@@ -44,3 +47,39 @@ async def generate_plan(
         ) from exc
 
     return success_response(plan)
+
+
+@router.get(
+    "/plans",
+    response_model=ApiResponse[list[dict]],
+    summary="列出历史研究计划",
+)
+async def list_research_plans(
+    limit: int = Query(default=20, ge=1, le=100),
+) -> ApiResponse[list[dict]]:
+    """[B27] 研究规划页的历史列表：每次成功生成的计划都会落库。
+
+    [B27-hardening] 历史列表是辅助读路径：存储层任何异常都降级为空列表，
+    绝不让它把「生成研究计划」所在的页面拖成 500 —— 主流程的可用性
+    高于历史回顾。
+    """
+    try:
+        return success_response(get_plan_store().list_plans(limit=limit))
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("列出历史规划失败，降级返回空列表")
+        return success_response([])
+
+
+@router.delete(
+    "/plans/{plan_id}",
+    response_model=ApiResponse[dict],
+    summary="删除一条历史研究计划",
+)
+async def delete_research_plan(plan_id: str) -> ApiResponse[dict]:
+    if not get_plan_store().delete(plan_id):
+        raise AppError(
+            code=ErrorCode.NOT_FOUND,
+            message=f"找不到这条计划：{plan_id}",
+            status_code=404,
+        )
+    return success_response({"deleted": True, "plan_id": plan_id})

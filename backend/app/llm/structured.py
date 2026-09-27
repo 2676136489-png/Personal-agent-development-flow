@@ -48,6 +48,30 @@ def _maybe_unwrap(payload: object, schema: type[T]) -> object:
     return payload
 
 
+def _restore_escaped_newlines(payload: object) -> object:
+    """把字符串里「字面 \\n / \\t」（反斜杠+n 两个字符）恢复成真实换行/制表符。
+
+    [B20] GLM-4-Flash 等小模型在 JSON 模式下经常把换行**双重转义**：
+    模型本想输出 "第一行\n第二行"（JSON 转义写法，解析后是真换行），
+    实际输出的却是 "第一行\\n第二行"（双重转义，解析后是字面 \n 两字符）。
+    这些字面符号会被前端原样渲染成 "\n"，报告里满屏反斜杠。
+
+    在 json.loads 之后、schema 校验之前统一递归清理，一处修复覆盖
+    报告 / 计划 / 分析 / 智能体决策等全部结构化输出。
+    注意：不能动 json.loads 之前的原始文本 —— 那会破坏合法 JSON 的转义结构。
+    """
+    if isinstance(payload, str):
+        # 只有确实存在字面序列时才替换，避免无谓的字符串拷贝
+        if "\\n" in payload or "\\t" in payload:
+            return payload.replace("\\n", "\n").replace("\\t", "\t")
+        return payload
+    if isinstance(payload, dict):
+        return {key: _restore_escaped_newlines(value) for key, value in payload.items()}
+    if isinstance(payload, list):
+        return [_restore_escaped_newlines(item) for item in payload]
+    return payload
+
+
 def parse_structured_payload(content: str, schema: type[T]) -> T:
     """把模型输出解析为 schema 实例。失败时抛出可重试的 LLMError。"""
     cleaned = _strip_code_fence(content)
@@ -70,11 +94,16 @@ def parse_structured_payload(content: str, schema: type[T]) -> T:
             raise LLMError(f"模型输出 JSON 解析失败：{exc}", kind="parse", retryable=True) from exc
 
     try:
-        return schema.model_validate(_maybe_unwrap(payload, schema))
+        return schema.model_validate(
+            _restore_escaped_newlines(_maybe_unwrap(payload, schema))
+        )
     except ValidationError as exc:
-        # 字段缺失或类型不对：把「哪个字段错了」写进日志友好的 message
+        # 字段缺失或类型不对：把「哪个字段错了」写进日志友好的 message。
+        # 注意：model 级 validator（如「二选一」）的 loc 为空，此时不要再拼 ": " 前缀，
+        # 否则会得到 "…schema：: Value error…" 这种双冒号的难看输出。
         problems = "; ".join(
-            f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()[:5]
+            f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" if err["loc"] else err["msg"]
+            for err in exc.errors()[:5]
         )
         raise LLMError(
             f"模型输出不符合 schema：{problems}",

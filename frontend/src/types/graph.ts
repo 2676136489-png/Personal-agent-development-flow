@@ -38,6 +38,18 @@ export interface RunStep {
   summary: string
 }
 
+/** 后端解析好的一条依据来源（app/graph/sources.py）。前端只渲染，不解析。 */
+export interface RunSource {
+  /** web = 联网搜索；knowledge = 知识库文档 */
+  origin: 'web' | 'knowledge'
+  title: string
+  /** 知识库来源没有 URL，为空字符串 */
+  url: string
+  snippet: string
+  /** 附加说明：检索源 / 页码+片段+相关度 */
+  source?: string | null
+}
+
 export interface ResearchRun {
   thread_id: string
   status: RunStatus
@@ -57,6 +69,8 @@ export interface ResearchRun {
     duration_ms: number
   }[]
   citations: Citation[]
+  /** 依据来源（后端结构化产出，可能为空数组） */
+  sources: RunSource[]
   evidence_count: number
   iteration: number
   verify_attempts: number

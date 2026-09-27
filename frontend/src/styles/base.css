@@ -83,8 +83,24 @@ a {
 /* ============ 页面转场 ============ */
 
 /* W1：520ms → 220ms */
+/*
+ * [F10] fill-mode 必须是 backwards，**不能是 both/forwards**。
+ *
+ * 原因（真实事故）：`page-in` 只有 from 关键帧，100% 状态 = 元素自身样式
+ * （transform: none）。但 `both`/`forwards` 会让动画结束后**继续保留动画
+ * 计算出的 transform** —— Chrome 实测 `getComputedStyle(main).transform`
+ * 得到 `matrix(1, 0, 0, 1, 0, 0)`（恒等矩阵，值不是 none）。
+ *
+ * 而「transform 不是 none」会让该元素成为**所有 position: fixed 后代的
+ * 包含块**。于是报告弹窗（.modal-backdrop, inset: 0）不再相对视口定位，
+ * 而是相对 <main> —— 遮罩从导航栏下沿（y=59）开始、高 624 而非整屏 720，
+ * 弹窗被顶到导航栏下面且不居中。
+ *
+ * backwards 只在动画开始前生效，结束后计算值回到 none，视觉完全一致
+ * （因为 to 状态本来就等于基础样式），但不再留下那个隐形的包含块。
+ */
 main {
-  animation: page-in 220ms var(--ease-out-expo) both;
+  animation: page-in 220ms var(--ease-out-expo) backwards;
 }
 
 @keyframes page-in {

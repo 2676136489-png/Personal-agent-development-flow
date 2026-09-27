@@ -42,7 +42,10 @@ class RunStore:
 
     def __init__(self, db_path: Path) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        # [B31] timeout=10：PlanStore 与本 store 共用同一个 .db 文件（不同连接），
+        # 写-写并发时 SQLite 默认 busy_timeout=0 会立刻抛 database is locked。
+        # 让它在锁上最多等 10 秒，把偶发竞争消化掉。
+        self._conn = sqlite3.connect(str(db_path), check_same_thread=False, timeout=10)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
@@ -101,6 +104,26 @@ class RunStore:
                     "SELECT * FROM agent_runs ORDER BY updated_at DESC LIMIT ?", (limit,)
                 ).fetchall()
         return [self._row_to_dict(row) for row in rows]
+
+    def delete(self, thread_id: str) -> bool:
+        """删除一条运行记录。返回是否真的删到了（供 API 区分 404/200）。"""
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM agent_runs WHERE thread_id = ?", (thread_id,)
+            )
+            self._conn.commit()
+        return cursor.rowcount > 0
+
+    def delete_all(self) -> int:
+        """清空全部运行记录，返回删除条数。
+
+        [B26] 用户明确要求「把历史记录删了」——调试期积累了大量重复/垃圾运行。
+        只删 agent_runs；事件表由调用方（service 层）一并清理，保持两张表一致。
+        """
+        with self._lock:
+            cursor = self._conn.execute("DELETE FROM agent_runs")
+            self._conn.commit()
+        return cursor.rowcount
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> dict:

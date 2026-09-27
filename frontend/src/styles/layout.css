@@ -104,7 +104,8 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: var(--space-2) var(--space-3);
+  height: 36px;
+  padding: 0 14px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -112,6 +113,7 @@
   font-size: var(--text-sm);
   border-radius: var(--radius-pill);
   cursor: pointer;
+  white-space: nowrap;
   transition: color 180ms var(--ease), background-color 180ms var(--ease),
     box-shadow var(--dur-fast) var(--ease);
 }
@@ -121,12 +123,14 @@
   background: var(--surface-alt);
 }
 
+/* 激活态：统一的朱红胶囊（与全站 accent 体系一致），不再叠加下划线/加粗描边 */
 .nav-link--active {
-  color: var(--ink);
+  color: var(--accent-ink);
   font-weight: 600;
+  background: var(--accent-tint);
 }
 
-/* 主推项：颜色改用 --accent-ink（tinted 底上的 accent 文字，见 §4.1 / M3） */
+/* 主推项：常驻 accent 文字，激活时叠胶囊底 */
 .nav-link--primary {
   color: var(--accent-ink);
   font-weight: 600;
@@ -140,18 +144,30 @@
   margin-left: var(--space-1);
   padding: 1px var(--space-2);
   border-radius: var(--radius-pill);
-  background: var(--accent-tint);
-  border: 1px solid var(--accent-border);
-  color: var(--accent-ink);
+  background: var(--accent);
+  border: 1px solid transparent;
+  color: var(--on-accent);
   font-size: var(--text-xs);
   font-weight: 600;
 }
 
-/* 开发者向：次级样式弱化（Q3：不隐藏，降级） */
-.nav-link--dev,
-.nav-link--dev.nav-link--active {
-  color: var(--faint);
+/* 开发者向：顶栏里与常规项同色（保持一行一致），"开发者向"提示只在抽屉里出现。
+   激活时仍给朱红胶囊，保证「当前页」高亮始终可见（否则停留在设置/评估页时无指示） */
+.nav-link--dev {
+  color: var(--muted);
   font-weight: 400;
+  background: transparent;
+}
+
+.nav-link--dev.nav-link--active {
+  color: var(--accent-ink);
+  font-weight: 600;
+  background: var(--accent-tint);
+}
+
+/* 顶栏不显示"开发者向 / 推荐角标"之外的次要提示，避免拥挤；抽屉里照常显示 */
+.nav-menu .nav-link__hint {
+  display: none;
 }
 
 .nav-link__hint {
@@ -434,14 +450,16 @@
   text-align: center;
 }
 
-.hero-facts strong {
+/* ⚠️ 用专属类名而不是 `.hero-facts strong/span`：后者会命中 CountUp 内部的数字 <span>，
+   把数字拆成独立一行的 10px 小字（线上错位的真实原因）。 */
+.hero-fact__value {
   display: block;
   font-size: var(--text-2xl);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
-.hero-facts span {
+.hero-fact__label {
   display: block;
   margin-top: 6px;
   color: var(--faint);

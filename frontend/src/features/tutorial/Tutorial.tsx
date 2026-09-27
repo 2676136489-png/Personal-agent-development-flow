@@ -1,4 +1,7 @@
 import { Reveal } from '../../components/Reveal'
+import { PageHeader } from '../../components/PageHeader'
+import { SectionNav } from '../../components/SectionNav'
+import { Stagger, StaggerItem } from '../../components/Stagger'
 import { BotIcon, BookIcon, ClipboardIcon, FlaskIcon, GraduationIcon, HomeIcon } from '../../components/icons'
 import type { IconProps } from '../../components/icons'
 import type { ComponentType } from 'react'
@@ -94,114 +97,134 @@ const STEPS = [
 export function Tutorial({ onNavigate }: { onNavigate?: NavigateFn }) {
   return (
     <>
-      <section className="hero">
-        <p className="hero-welcome">使用教程</p>
-        <h1>三步上手，把问题跑成研究报告。</h1>
-        <p className="hero-lede">
-          无论你是第一次使用，还是想摸清每个模块的能力，这份教程都能帮你快速理解平台，并跑通一次完整研究。
-        </p>
-        <div className="hero-actions">
-          <button className="button button--primary" onClick={() => onNavigate?.('workflow')}>
-            直接开始研究
-          </button>
-          <button className="button" onClick={() => onNavigate?.('dashboard')}>
-            回到概览
-          </button>
-        </div>
-      </section>
-
-      {/* ============ 功能模块详解 ============ */}
-      <section className="section">
-        <Reveal className="section-head">
-          <p className="eyebrow">功能模块</p>
-          <h2>每个模块解决什么问题？</h2>
-          <p className="section-lede">
-            平台由「概览 / 研究规划 / 智能体 / 知识库 / 深度研究」五个模块组成，各司其职、可单独使用，也可串成完整研究链路。
-          </p>
-        </Reveal>
-
-        <div className="module-grid">
-          {MODULES.map((m, i) => {
-            const Icon = m.icon
-            return (
-              <Reveal className="module" key={m.name} delay={(i % 2) * 80}>
-                <div className="module__head">
-                  <span className="module__icon"><Icon size={21} /></span>
-                  <h3>{m.name}</h3>
-                </div>
-                <p className="module__role">{m.role}</p>
-                <div className="module__meta">
-                  <div className="module__row">
-                    <b>适用场景</b>
-                    {m.scenario}
-                  </div>
-                  <div className="module__row">
-                    <b>交互逻辑</b>
-                    {m.interaction}
-                  </div>
-                </div>
-              </Reveal>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* ============ 常见使用场景 ============ */}
-      <section className="section">
-        <Reveal className="section-head">
-          <p className="eyebrow">常见场景</p>
-          <h2>这些事，用它最顺手。</h2>
-          <p className="section-lede">
-            从「快速了解一个方向」到「基于内部资料做研究」，下面是几种最常落地的用法。
-          </p>
-        </Reveal>
-
-        <div className="scenario-grid">
-          {SCENARIOS.map((s, i) => (
-            <Reveal className="scenario" key={s.title} delay={(i % 2) * 80}>
-              <span className="scenario__tag">{s.tag}</span>
-              <h3>{s.title}</h3>
-              <p>{s.desc}</p>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      {/* ============ 分步操作指引 ============ */}
-      <section className="section">
-        <Reveal className="section-head">
-          <p className="eyebrow">分步指引</p>
-          <h2>照着做，五步跑通一次研究。</h2>
-          <p className="section-lede">
-            按从「概览」到「研究报告」的顺序操作。深度研究与智能体会在后台持续运行并实时推送事件，你可以随时切到其他模块同步查看，进度不会中断。
-          </p>
-        </Reveal>
-
-        <ol className="guide">
-          {STEPS.map((s, i) => (
-            <Reveal className="guide__item" as="li" key={s.title}>
-              <span className="guide__no">{i + 1}</span>
-              <div className="guide__body">
-                <h4>{s.title}</h4>
-                <p>{s.desc}</p>
-              </div>
-            </Reveal>
-          ))}
-        </ol>
-
-        <div className="cta-banner">
-          <h3>准备好跑一次研究了吗？</h3>
-          <p>从「深度研究」开始，或直接回到「概览」再看一遍平台能做什么。</p>
+      <PageHeader
+        eyebrow="使用教程"
+        title="三步上手，把问题跑成研究报告。"
+        lede="无论你是第一次使用，还是想摸清每个模块的能力，这份教程都能帮你快速理解平台，并跑通一次完整研究。"
+        notes={[
+          { term: '适合谁', desc: '第一次上手、或想系统了解每个模块能解决什么问题的用户。' },
+          { term: '怎么读', desc: '自上而下：先看模块详解，再对照场景，最后按分步指引跑通一次。' },
+          { term: '读完能做什么', desc: '独立用任意模块，并把它们串成一条完整的研究链路。' },
+        ]}
+        actions={
           <div className="hero-actions">
             <button className="button button--primary" onClick={() => onNavigate?.('workflow')}>
-              开始研究
+              直接开始研究
             </button>
             <button className="button" onClick={() => onNavigate?.('dashboard')}>
-              查看概览
+              回到概览
             </button>
           </div>
+        }
+      />
+
+      <div className="doc-layout">
+        <SectionNav
+          title="本页内容"
+          items={[
+            { id: 'modules', label: '功能模块' },
+            { id: 'scenarios', label: '常见场景' },
+            { id: 'steps', label: '分步指引' },
+          ]}
+        />
+
+        <div className="doc-layout__main">
+          {/* ============ 功能模块详解 ============ */}
+          <section className="section" id="modules">
+            <Reveal className="section-head">
+              <p className="eyebrow">功能模块</p>
+              <h2>每个模块解决什么问题？</h2>
+              <p className="section-lede">
+                平台由「概览 / 研究规划 / 智能体 / 知识库 / 深度研究」五个模块组成，各司其职、可单独使用，也可串成完整研究链路。
+              </p>
+            </Reveal>
+
+            <Stagger className="module-grid">
+              {MODULES.map((m) => {
+                const Icon = m.icon
+                return (
+                  <StaggerItem key={m.name}>
+                    <div className="module">
+                      <div className="module__head">
+                        <span className="module__icon"><Icon size={21} /></span>
+                        <h3>{m.name}</h3>
+                      </div>
+                      <p className="module__role">{m.role}</p>
+                      <div className="module__meta">
+                        <div className="module__row">
+                          <b>适用场景</b>
+                          {m.scenario}
+                        </div>
+                        <div className="module__row">
+                          <b>交互逻辑</b>
+                          {m.interaction}
+                        </div>
+                      </div>
+                    </div>
+                  </StaggerItem>
+                )
+              })}
+            </Stagger>
+          </section>
+
+          {/* ============ 常见使用场景 ============ */}
+          <section className="section" id="scenarios">
+            <Reveal className="section-head">
+              <p className="eyebrow">常见场景</p>
+              <h2>这些事，用它最顺手。</h2>
+              <p className="section-lede">
+                从「快速了解一个方向」到「基于内部资料做研究」，下面是几种最常落地的用法。
+              </p>
+            </Reveal>
+
+            <div className="scenario-grid">
+              {SCENARIOS.map((s, i) => (
+                <Reveal className="scenario" key={s.title} delay={(i % 2) * 80}>
+                  <span className="scenario__tag">{s.tag}</span>
+                  <h3>{s.title}</h3>
+                  <p>{s.desc}</p>
+                </Reveal>
+              ))}
+            </div>
+          </section>
+
+          {/* ============ 分步操作指引 ============ */}
+          <section className="section" id="steps">
+            <Reveal className="section-head">
+              <p className="eyebrow">分步指引</p>
+              <h2>照着做，五步跑通一次研究。</h2>
+              <p className="section-lede">
+                按从「概览」到「研究报告」的顺序操作。深度研究与智能体会在后台持续运行并实时推送事件，你可以随时切到其他模块同步查看，进度不会中断。
+              </p>
+            </Reveal>
+
+            <ol className="guide">
+              {STEPS.map((s, i) => (
+                <Reveal className="guide__item" as="li" key={s.title}>
+                  <span className="guide__no">{i + 1}</span>
+                  <div className="guide__body">
+                    <h4>{s.title}</h4>
+                    <p>{s.desc}</p>
+                  </div>
+                </Reveal>
+              ))}
+            </ol>
+
+            <div className="cta-banner">
+              <h3>准备好跑一次研究了吗？</h3>
+              <p>从「深度研究」开始，或直接回到「概览」再看一遍平台能做什么。</p>
+              <div className="hero-actions">
+                <button className="button button--primary" onClick={() => onNavigate?.('workflow')}>
+                  开始研究
+                </button>
+                <button className="button" onClick={() => onNavigate?.('dashboard')}>
+                  查看概览
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
     </>
   )
 }

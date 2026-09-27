@@ -4,6 +4,7 @@
 
 > 当前阶段：**Phase 5 — LangGraph 工作流**。
 > 架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)。
+> 项目整体说明、关键设计取舍与提交记录见 [`PROJECT.md`](PROJECT.md)。
 
 ---
 
@@ -68,7 +69,12 @@ cd frontend   # 另开终端
 npm run dev
 ```
 
-打开 http://127.0.0.1:5173 → **Research Workflow**。不需要任何 Key（LLM 用 Mock，Embedding 用本地哈希向量）。
+打开 http://127.0.0.1:5173 → **深度研究**。
+
+默认主模型是**本地 Ollama 的 `qwen3:8b`**（`LLM_PROVIDER=ollama`），需要本机已 `ollama serve`
+且 `ollama pull qwen3:8b`。本机没有 Ollama 也不会 500：会按 `LLM_FALLBACK_PROVIDER`
+回落到云端，或最终退化成离线 Mock（`LLM_PROVIDER=mock`）。
+切换模型只改 `.env` 里的 `LLM_PROVIDER`，业务代码零改动，详见 `docs/llm-provider.md`。
 
 ---
 
@@ -80,6 +86,10 @@ npm run dev
 | POST | `/api/graph/research/{thread_id}/resume` | 批准（`approved=true` + 可选 `feedback`）或拒绝 |
 | GET | `/api/graph/research/{thread_id}` | 查询状态 |
 | GET | `/api/graph/runs` | 历史运行列表 |
+| GET | `/api/llm/provider` | 当前生效的模型配置（provider / 模型 / 超时 / 兜底，**不含密钥**） |
+| GET | `/api/llm/ping` | 真的打一次模型，确认「配对了」且「能答」 |
+| POST | `/api/llm/stream` | 流式自测（SSE，逐块返回） |
+| GET | `/api/health` | 存活探针（带指标快照） |
 
 ```powershell
 $r = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/graph/research" -Method Post `
@@ -102,7 +112,7 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/graph/research/$($r.data.threa
 | 2 | 人工确认 | 填意见 → 批准 | 状态 `completed`，出现 Report（含 sections / limitations） |
 | 3 | 拒绝 | 点「拒绝并终止」 | 状态 `cancelled`，无报告 |
 | 4 | 循环 | 看 Pipeline | `Research ×N`（N ≤ max_iterations） |
-| 5 | 单元测试 | `uv run pytest` | `61 passed` |
+| 5 | 单元测试 | `uv run pytest` | `165 passed` |
 | 6 | 静态检查 | `uv run ruff check app tests` | `All checks passed!` |
 | 7 | 前端类型 | `npm run typecheck` | 无输出 |
 

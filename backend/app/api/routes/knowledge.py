@@ -116,6 +116,24 @@ async def list_chunks(
     return success_response(service.list_chunks(document_id))
 
 
+@router.delete(
+    "/documents/{document_id}",
+    response_model=ApiResponse[dict],
+    summary="删除一份文档及其全部片段",
+)
+async def delete_document(
+    document_id: str,
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> ApiResponse[dict]:
+    if not service.delete_document(document_id):
+        raise AppError(
+            code=ErrorCode.NOT_FOUND,
+            message=f"找不到这份文档：{document_id}",
+            status_code=404,
+        )
+    return success_response({"deleted": True, "document_id": document_id})
+
+
 @router.post(
     "/search",
     response_model=ApiResponse[list[RetrievedChunk]],

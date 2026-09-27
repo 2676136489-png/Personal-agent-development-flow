@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listRuns } from '../../api/graph'
+import { formatRelativeTime } from '../../lib/time'
+import { clearRuns, deleteRun, listRuns } from '../../api/graph'
 import { ApiClientError } from '../../api/client'
 import { StatusBadge } from '../../components/StatusBadge'
 import { EmptyState } from '../../components/EmptyState'
 import { LoadingState } from '../../components/LoadingState'
 import { ErrorState } from '../../components/ErrorState'
+import { notify } from '../../components/Toast'
 import type { ResearchRunSummary } from '../../types/graph'
 
 export interface RunHistoryProps {
@@ -29,17 +31,6 @@ const STATUS_VARIANT: Record<string, 'ok' | 'warn' | 'error' | 'info' | 'running
   cancelled: 'warn',
 }
 
-function formatTime(iso: string): string {
-  const d = new Date(iso)
-  const now = new Date()
-  const diff = Math.max(0, Math.floor((now.getTime() - d.getTime()) / 1000))
-  if (diff < 60) return '刚刚'
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-  if (diff < 604800) return `${Math.floor(diff / 86400)} 天前`
-  return d.toLocaleDateString()
-}
-
 function truncate(text: string, max = 80): string {
   return text.length > max ? `${text.slice(0, max)}…` : text
 }
@@ -49,6 +40,8 @@ export function RunHistory({ onSelect, limit = 10, status }: RunHistoryProps) {
   // 首屏即为 loading：避免数据到达前误显示「还没有运行记录」的空态闪烁
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // 清空需要二次确认：误点一次就全删太狠了
+  const [confirmingClear, setConfirmingClear] = useState(false)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -68,6 +61,39 @@ export function RunHistory({ onSelect, limit = 10, status }: RunHistoryProps) {
     void refresh()
   }, [refresh])
 
+  async function handleDelete(threadId: string) {
+    try {
+      await deleteRun(threadId)
+      setRuns((prev) => prev.filter((run) => run.thread_id !== threadId))
+      notify({ tone: 'ok', title: '已删除这条记录' })
+    } catch (err) {
+      notify({
+        tone: 'error',
+        title: '删除失败',
+        desc: err instanceof ApiClientError ? err.message : '请稍后重试',
+      })
+    }
+  }
+
+  async function handleClear() {
+    if (!confirmingClear) {
+      setConfirmingClear(true)
+      return
+    }
+    setConfirmingClear(false)
+    try {
+      const result = await clearRuns()
+      setRuns([])
+      notify({ tone: 'ok', title: '历史已清空', desc: `删除了 ${result.runs_deleted} 条运行记录` })
+    } catch (err) {
+      notify({
+        tone: 'error',
+        title: '清空失败',
+        desc: err instanceof ApiClientError ? err.message : '请稍后重试',
+      })
+    }
+  }
+
   return (
     <section className="activity">
       <div className="activity__head">
@@ -75,6 +101,15 @@ export function RunHistory({ onSelect, limit = 10, status }: RunHistoryProps) {
         <button className="link-button" onClick={() => void refresh()} disabled={loading}>
           {loading ? '刷新中…' : '刷新'}
         </button>
+        {runs.length > 0 && (
+          <button
+            className={`link-button ${confirmingClear ? 'link-button--danger' : ''}`.trim()}
+            onClick={() => void handleClear()}
+            onBlur={() => setConfirmingClear(false)}
+          >
+            {confirmingClear ? '再点一次确认清空' : '清空历史'}
+          </button>
+        )}
       </div>
 
       {loading && runs.length === 0 && <LoadingState variant="list" rows={3} />}
@@ -97,7 +132,15 @@ export function RunHistory({ onSelect, limit = 10, status }: RunHistoryProps) {
               >
                 <StatusBadge variant={STATUS_VARIANT[run.status] ?? 'info'}>{STATUS_LABEL[run.status] ?? run.status}</StatusBadge>
                 <span className="run-list__q">{truncate(run.question)}</span>
-                <span className="hint">{formatTime(run.updated_at)}</span>
+                <span className="hint">{formatRelativeTime(run.updated_at)}</span>
+              </button>
+              <button
+                className="run-list__delete"
+                aria-label="删除这条记录"
+                title="删除这条记录"
+                onClick={() => void handleDelete(run.thread_id)}
+              >
+                ×
               </button>
             </li>
           ))}

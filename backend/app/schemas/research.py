@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class PlanStep(BaseModel):
@@ -84,6 +84,35 @@ class ResearchPlan(BaseModel):
             )
         return normalized
 
+    @model_validator(mode="after")
+    def _plan_must_have_content(self) -> ResearchPlan:
+        """[B22] 空计划判为不合规，交给上层 repair 重试。
+
+        questions / steps 只是 list 没有 min_length：模型偶尔输出
+        {"goal": "...", "questions": [], "steps": [], "expected_sources": []}，
+        校验能过，但前端只能渲染出一张「计划概览」卡片，
+        用户看到的就是"根本没有展示出计划是什么"。
+        这里把空计划变成校验失败，planning_service / complete_structured
+        的 repair 机制会把具体缺失回灌给模型重来。
+        """
+        missing: list[str] = []
+        if not self.questions:
+            missing.append("questions（需要 4~7 个关键子问题）")
+        if not self.steps:
+            missing.append("steps（需要按 index/title/instruction 给出的有序执行步骤）")
+        if missing:
+            raise ValueError(
+                "计划内容缺失：" + "、".join(missing) + "。请补全后重新输出完整 JSON。"
+            )
+        # [B24] 只拆出 1~2 个子问题等于没拆 —— 用户看到的就是"把问题复述了一遍"。
+        # 判为不合规让 repair 把这条要求回灌给模型（prompt 里要求 4~7 个，这里守底线 3 个）。
+        if len(self.questions) < 3:
+            raise ValueError(
+                f"关键子问题太少（只有 {len(self.questions)} 个）："
+                "请从现状/对比/数据/原因/风险等不同维度至少拆出 4 个子问题。"
+            )
+        return self
+
 
 class PlanRequest(BaseModel):
     """POST /api/research/plan 的请求体。"""
@@ -107,3 +136,5 @@ class PlanResponse(BaseModel):
     mock: bool
     usage: dict
     latency_ms: int
+    # [B27] 落库后的记录 id（历史规划列表用）；落库失败时为空
+    plan_id: str | None = None

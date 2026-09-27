@@ -16,7 +16,12 @@ from app.graph.graph import (
     route_after_research,
     route_after_verify,
 )
-from app.graph.service import get_research, resume_research, start_research
+from app.graph.service import (
+    _drain_background_tasks,
+    get_research,
+    resume_research,
+    start_research,
+)
 
 QUESTION = "研究 2026 年 AI Agent 开发岗位的主要技术要求，并分析共同点。"
 
@@ -69,40 +74,52 @@ def test_graph_has_interrupt_before_write():
 
 
 async def test_full_run_interrupts_then_resumes():
-    """完整流程：启动 → 在 write 前中断 → 批准后完成"""
+    """完整流程：启动 → 在 write 前中断 → 批准后完成
+
+    [B25] 接口契约已改为「立即返回 running + 图在后台执行」，
+    所以每个阶段都要先 drain 后台任务，再从落库记录断言状态。
+    """
     started = await start_research(question=QUESTION, max_iterations=3)
+    assert started.status == "running"  # 立即返回，图在后台跑
+
+    await _drain_background_tasks()
 
     # 1) 中断在写报告之前
-    assert started.status == "awaiting_approval"
-    assert started.report is None
+    stored = await get_research(started.thread_id)
+    assert stored is not None
+    assert stored.status == "awaiting_approval"
+    assert stored.report is None
     # 2) 前面的节点都跑过了
-    nodes = [step["node"] for step in started.steps]
+    nodes = [step["node"] for step in stored.steps]
     assert nodes[0] == "understand_task"
     assert "plan" in nodes and "analyze" in nodes and "verify" in nodes
     # 3) 有工具调用与证据
-    assert started.tool_calls
-    assert started.evidence_count >= 1
+    assert stored.tool_calls
+    assert stored.evidence_count >= 1
     # 4) 循环受最大轮数约束
-    assert started.iteration <= 3
+    assert stored.iteration <= 3
 
-    # 5) 带人工意见恢复
+    # 5) 带人工意见恢复（批准分支同样是后台执行）
     resumed = await resume_research(
         thread_id=started.thread_id,
         approved=True,
         feedback="请补充局限性说明",
     )
-    assert resumed.status == "completed"
-    assert resumed.report is not None
-    assert resumed.report["sections"]
+    assert resumed.status == "running"
 
-    # 6) 运行记录可查（保存 Agent Run）
-    stored = await get_research(started.thread_id)
-    assert stored is not None
-    assert stored.status == "completed"
+    await _drain_background_tasks()
+
+    final = await get_research(started.thread_id)
+    assert final is not None
+    assert final.status == "completed"
+    assert final.report is not None
+    assert final.report["sections"]
 
 
 async def test_rejecting_stops_the_run():
     started = await start_research(question=QUESTION, max_iterations=1)
+    # 等图跑到 write 前的中断点，否则 resume 时还没有可恢复的中断状态
+    await _drain_background_tasks()
     rejected = await resume_research(thread_id=started.thread_id, approved=False)
 
     assert rejected.status == "cancelled"
@@ -149,7 +166,10 @@ async def test_live_subscriber_receives_terminal_event():
     queue, _ = bus.subscribe(thread_id, last_event_id=0)
     try:
         started = await start_research(question=QUESTION, max_iterations=1, thread_id=thread_id)
+        # [B25] 图在后台跑：先等它到 write 前中断，再批准，再等 write 完成
+        await _drain_background_tasks()
         await resume_research(thread_id=started.thread_id, approved=True)
+        await _drain_background_tasks()
 
         received: list[str] = []
         while not queue.empty():
@@ -244,7 +264,7 @@ def test_start_and_end_are_wired():
 
     没有这条，上面那条顺序断言可能在一个「顺序对但没接线」的图上通过。
     """
-    from langgraph.graph import START, END
+    from langgraph.graph import END, START
 
     graph = get_research_graph()
     node_names = set(graph.nodes)
@@ -256,6 +276,10 @@ def test_start_and_end_are_wired():
     drawable = graph.get_graph()
     edges = {(e.source, e.target) for e in drawable.edges}
 
-    assert (START, "understand_task") in edges, f"START 未接线到 understand_task；实际出边含 {[e for e in edges if e[0] == START]}"
-    assert ("write", END) in edges, f"write 未接线到 END；实际 write 出边 {[e for e in edges if e[0] == 'write']}"
-    assert ("fail", END) in edges, f"fail 未接线到 END；实际 fail 出边 {[e for e in edges if e[0] == 'fail']}"
+    start_out = [e for e in edges if e[0] == START]
+    write_out = [e for e in edges if e[0] == "write"]
+    fail_out = [e for e in edges if e[0] == "fail"]
+
+    assert (START, "understand_task") in edges, f"START 未接线到 understand_task：{start_out}"
+    assert ("write", END) in edges, f"write 未接线到 END；实际 write 出边 {write_out}"
+    assert ("fail", END) in edges, f"fail 未接线到 END；实际 fail 出边 {fail_out}"

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -19,12 +20,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.gzip import GZipMiddleware
 
+from app.agent.run_store import get_agent_run_store
 from app.api.routes import api_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.middleware import RequestContextMiddleware
+from app.core.middleware import (
+    CacheControlMiddleware,
+    DailyRunBudgetMiddleware,
+    JsonErrorFallbackMiddleware,
+    RateLimitMiddleware,
+    RequestContextMiddleware,
+    RunBudgetRegistry,
+    SecurityHeadersMiddleware,
+)
 from app.events.store import get_event_store
 from app.graph.run_store import get_run_store
 from app.rag.store import get_knowledge_store
@@ -44,6 +55,7 @@ def _close_sqlite_handles() -> None:
     for name, closer in (
         ("events", lambda: get_event_store().close()),
         ("agent_runs", lambda: get_run_store().close()),
+        ("agent_workspace_runs", lambda: get_agent_run_store().close()),
         ("knowledge", lambda: get_knowledge_store().close()),
     ):
         try:
@@ -85,6 +97,9 @@ def _frontend_dist_dir() -> Path | None:
         raw = Path(configured)
         # 绝对路径直接用；相对路径锚到 backend/，不依赖 cwd
         candidates.append(raw if raw.is_absolute() else backend_root / raw)
+    # ⚠️ 目录名用 `webapp` 而非 `frontend_dist`：线上部署工具会把名字含 `dist` 的目录
+    #    当"构建产物"排除，导致前端产物永远传不上去（后端却会更新）。见 .env.production 注释。
+    candidates.append(backend_root / "webapp")
     candidates.append(backend_root / "frontend_dist")
     candidates.append(Path(__file__).resolve().parents[2] / "frontend" / "dist")
 
@@ -114,12 +129,25 @@ def _mount_frontend(app: FastAPI) -> bool:
         )
         return False
 
+    settings = get_settings()
     assets_dir = dist / "assets"
     if assets_dir.is_dir():
-        # 带内容哈希的静态资源，可以放心长缓存
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+        # 带内容哈希的静态资源，可以放心长缓存。
+        # 外层依次套：GZip（压缩 JS/CSS，静态资源非流式，安全）→ Cache-Control（immutable）。
+        # ⚠️ 只在静态挂载点做 GZip，**不给全局加** GZipMiddleware：那会把 SSE 事件流也缓冲压缩，
+        #    导致事件被憋到连接结束才吐（SSE 是本服务核心功能）。
+        assets_app: object = StaticFiles(directory=assets_dir)
+        assets_app = GZipMiddleware(assets_app, minimum_size=800)  # type: ignore[arg-type]
+        if settings.static_assets_immutable:
+            assets_app = CacheControlMiddleware(
+                assets_app,  # type: ignore[arg-type]
+                header_value=f"public, max-age={settings.static_assets_max_age}, immutable",
+            )
+        app.mount("/assets", assets_app, name="assets")  # type: ignore[arg-type]
 
     index_file = dist / "index.html"
+    # index.html 必须 no-cache：否则部署后浏览器仍用旧 HTML，指向已删除的旧 chunk → 白屏
+    index_headers = {"Cache-Control": "no-cache"}
 
     @app.get(
         "/{full_path:path}",
@@ -152,7 +180,7 @@ def _mount_frontend(app: FastAPI) -> bool:
             if candidate.is_file() and candidate.is_relative_to(dist.resolve()):
                 return FileResponse(candidate)
 
-        return FileResponse(index_file)
+        return FileResponse(index_file, headers=index_headers)
 
     logging.getLogger(__name__).info("已挂载前端静态产物：%s", dist)
     return True
@@ -160,8 +188,19 @@ def _mount_frontend(app: FastAPI) -> bool:
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
-    # 启动阶段没有需要初始化的资源；关闭时释放 SQLite 连接
+    # 启动：知识库为空时后台导入预置示例文档（不阻塞服务就绪）
+    from app.rag.service import seed_knowledge_base_if_empty  # noqa: PLC0415
+
+    seed_task = asyncio.create_task(seed_knowledge_base_if_empty())
     yield
+    # 关闭：先等 seed 与后台图任务收尾，再释放 SQLite 连接
+    from app.graph.service import _drain_background_tasks  # noqa: PLC0415  # 避免循环 import
+
+    try:
+        await asyncio.wait_for(seed_task, timeout=30)
+        await asyncio.wait_for(_drain_background_tasks(), timeout=10)
+    except Exception:  # noqa: BLE001 - 关闭阶段不阻塞退出
+        logging.getLogger(__name__).warning("后台任务未在超时内收尾，强制退出")
     _close_sqlite_handles()
 
 
@@ -173,8 +212,9 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.version,
         description="AI Research Workspace backend (Phase 1 skeleton)",
-        docs_url=f"{settings.api_prefix}/docs",
-        openapi_url=f"{settings.api_prefix}/openapi.json",
+        # 生产环境默认关闭交互式文档（暴露全部接口结构）；可用 API_DOCS_ENABLED=true 临时打开
+        docs_url=f"{settings.api_prefix}/docs" if settings.api_docs_enabled else None,
+        openapi_url=f"{settings.api_prefix}/openapi.json" if settings.api_docs_enabled else None,
         default_response_class=UTF8JSONResponse,
         lifespan=_lifespan,
     )
@@ -183,10 +223,45 @@ def create_app() -> FastAPI:
     # CORS 必须在最外层，否则带错误状态码的响应（401/500）不会带 CORS 头，
     # 浏览器会以「CORS 错误」的形式报错，掩盖真正的错误原因。
     app.add_middleware(RequestContextMiddleware)
+    # 限流：昂贵端点防滥用（默认关；生产 .env.production 打开）
+    if settings.rate_limit_enabled:
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests_per_minute=settings.rate_limit_requests_per_minute,
+            paths=tuple(settings.rate_limit_path_list),
+        )
+    # 「今日额度」查询的实例登记处：中间件在栈构建时把实例登记进来，
+    # 路由（GET /api/settings/run-budget）经 request.app.state 读取实时计数。
+    run_budget_registry = RunBudgetRegistry()
+    app.state.run_budget_registry = run_budget_registry
+    # 每日运行预算：与限流互补的第二道闸（拦「细水长流刷一整天」）
+    if settings.daily_run_budget_enabled:
+        app.add_middleware(
+            DailyRunBudgetMiddleware,
+            per_ip_limit=settings.daily_run_budget_per_ip,
+            paths=tuple(settings.daily_run_budget_path_list),
+            registry=run_budget_registry,
+        )
+    # 安全响应头：纯 ASGI，不缓冲响应体（SSE 安全）
+    if settings.security_headers_enabled:
+        app.add_middleware(
+            SecurityHeadersMiddleware,
+            csp=settings.content_security_policy,
+            hsts=settings.is_production,
+        )
+    # 最外层 JSON 兜底：外层中间件自身抛异常时也返回统一 JSON（而不是纯文本 500）
+    # 必须在内层中间件（限流/安全头/请求上下文）之外、CORS 之内。
+    app.add_middleware(JsonErrorFallbackMiddleware)
+    # CORS：单端口部署下前后端**同源**，浏览器根本不发跨域请求，白名单只对
+    # 「将来前端被单独托管」的场景有意义。
+    # ⚠️ allow_credentials 不能与 "*" 同用：二者并存时 Starlette 会退化成
+    # 「回显请求方的任意 Origin + 允许携带凭证」，等于对全网开放带凭证的跨域请求。
+    # 本项目不使用 Cookie/凭证，因此只有显式白名单时才开启 credentials。
+    cors_origins = settings.cors_origins_list
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins_list,
-        allow_credentials=True,
+        allow_origins=cors_origins,
+        allow_credentials="*" not in cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
