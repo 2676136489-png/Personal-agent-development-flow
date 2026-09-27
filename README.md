@@ -2,6 +2,10 @@
 
 一个 **Evidence-first（证据优先）的 AI 研究工作台**。用户输入复杂研究任务，LangGraph 驱动的研究工作流自动理解任务、制定计划、调用工具（联网搜索 / 抓取网页 / 计算 / 查知识库）收集证据、分析、验证，在写报告前**中断等待人工确认**，最终产出带来源的研究报告。
 
+**在线地址：<https://ai-research-workspace.app.workbuddy.host/>**
+
+不用配任何东西就能打开看。几点先说明：模型走智谱 GLM-4-Flash 免费档，搜索走 Tavily 免费额度（每月 1000 credit），所以连续跑几次可能会提示额度已用、本次不联网；知识库目前没配真实的 embedding 模型，深度研究里它是被主动排除的（原因见 [`PROJECT.md`](PROJECT.md) 第四节）。
+
 > 当前阶段：**Phase 5 — LangGraph 工作流**。
 > 架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)。
 > 项目整体说明、关键设计取舍与提交记录见 [`PROJECT.md`](PROJECT.md)。
