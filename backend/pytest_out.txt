@@ -1,2 +1,0 @@
-........................................................................ [ 60%]
-...............................................                          [100%][safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":57,"threshold":50,"scope":"turn","targets":["\\\\?\\C:\\Users\\111\\AppData\\Local\\Temp\\pytest-of-111\\garbage-3479d006-e123-4895-adb7-5d8aadee6757"],"targetCount":1}

@@ -58,3 +58,7 @@ data/
 storage/
 *.log
 *.err
+
+# 调试图省事把 pytest 输出重定向成文件时留下的转储，不该进仓库
+pytest_*.txt
+.pytest_*.txt
