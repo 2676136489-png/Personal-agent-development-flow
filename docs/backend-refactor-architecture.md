@@ -379,10 +379,10 @@ WHERE search_quota.credits_used + excluded.credits_used <= ?   -- monthly_credit
 | --- | --- |
 | 同线程 / 同 asyncio 事件循环内的并发 `reserve` | SQL 单语句原子 + `self._lock`（`threading.Lock`）串行化写路径 |
 | 跨线程（后台任务 / 线程池） | 同 `self._lock`；连接用 `check_same_thread=False` |
-| 跨进程（多 worker） | ⚠️ **本次不支持**。各 worker 有自己的 `sqlite3` 连接与 `Lock`，会低估总量。缓解：README + `/api/health` 标注 `quota_mode: single-worker`；WAL + `synchronous=NORMAL` 保证不会写坏库，最坏结果是「少记」，不会「多给额度」 |
+| 跨进程（多 worker） | **按单进程设计**。各 worker 有自己的 `sqlite3` 连接与 `Lock`，会低估总量。缓解：README + `/api/health` 标注 `quota_mode: single-worker`；WAL + `synchronous=NORMAL` 保证不会写坏库，最坏结果是「少记」，不会「多给额度」 |
 | 预扣了但进程崩溃 | `reservation` 行会残留。`_ensure_current_period` 启动时清一次：`UPDATE search_quota_reservation SET state='released' WHERE state='open'`（refresh 语义）；`snapshot()` 读取时对 `state='open'` 的计 0（反正 SQL 也没加过） |
 
-**为什么不是进程内存 dict**：重启即清零 = 用户重启服务就能「刷新」免费额度。对按 credit 计费的外部服务，这个记账不成立，是漏洞。SQLite 是主理人已拍板的方案，理由成立。
+**为什么不是进程内存 dict**：重启即清零 = 用户重启服务就能「刷新」额度。对按 credit 计费的外部服务，这个记账不成立，是漏洞。SQLite 是主理人已拍板的方案，理由成立。
 
 ### 2.4 预扣 vs 后扣的落点
 
@@ -1461,9 +1461,9 @@ graph LR
 
 | # | 问题 | 结论（技术判断） |
 | --- | --- | --- |
-| Q1 | 配额窗口：自然月 vs 30 天滚动 | **采用自然月 `YYYY-MM`**。与 Tavily 免费额度的心智模型一致；lazy rollover 实现最简单（`period_key` 换一行即可）；`/api/settings` 的 `renews_at` 可以直接给「下月 1 日」。30 天滚动需要每次读取做日期分桶，收益不抵复杂度 |
+| Q1 | 配额窗口：自然月 vs 30 天滚动 | **采用自然月 `YYYY-MM`**。与 Tavily 额度的计量方式一致；lazy rollover 实现最简单（`period_key` 换一行即可）；`/api/settings` 的 `renews_at` 可以直接给「下月 1 日」。30 天滚动需要每次读取做日期分桶，收益不抵复杂度 |
 | Q2 | 多 worker | **本次只支持单 worker**（主理人已拍板）。~~记账在 SQLite 但锁是进程内的，`--workers>1` 会低估。~~ 缓解：README 标注 + `/api/health` 暴露 `quota_mode: single-worker`。**不实现分布式计数**——要真做需要 Redis 或 `BEGIN IMMEDIATE` + 心跳租约，超出范围。<br/><br/>⚠️ **2026-09-25 实测更正（本条的「理由」已证伪，但结论不变）**：经真实多进程实测（6 进程并发写），原文写的「进程内锁 → 低估」**不是**真实风险——`quota.py` 的预扣是**单条 UPSERT**，判定条件在 SQL 的 `WHERE` 里，检查与累加同语句完成，**跨进程依然原子**（实测 limit=10、每次扣 2，3 进程各 6 次 → 最终 used=10，未超额）。那把 `threading.Lock` 只负责「同一 sqlite3 连接不被多线程同时用」，**不承担防超额职责**。<br/>**真实风险是另外两条**：① **Windows + WAL 下多进程并发写会让部分进程的写路径永久只读**（`OperationalError: attempt to write a readonly database`；实测 6 进程 × 20 写，WAL 失败 80 次 / 4 个进程完全瘫痪，DELETE 模式 0 失败；且配额 store 是 `lru_cache` 单例、**生产代码无重连路径**，故坏掉的 worker 会一直坏到进程重启 → 用户侧 500）；② `_reconcile_open_reservations()` 在多进程下会把**超过 600s 的在途预扣**误退款，而退款后 `settle()` 因 `state != 'open'` 幂等返回 → 真实消耗**永久少记**，少记经 `remaining = limit - used` 放大成**真实超额**（实测 limit=10 实际花掉 14）。<br/>**故「禁用 `--workers>1`」这条约束仍然正确，但理由必须按上述两条重写。** 若将来真要支持多 worker，正确方向是**换掉 WAL / 单一记账进程 / 连接级重试重连**——**加进程锁一条都解决不了** |
-| Q3 | `search_depth` 是否改 `basic` | ~~**保留 `advanced`**，但改为可配置 `search_depth`（默认 `advanced`）+ 设置页明示「advanced = 2 credits / basic = 1 credits」，让用户自行切换降本。理由：研究产品的证据质量优先，为了省额度默认降级质量是本末倒置。**不接新供应商**~~ <br/><br/>⚠️ **2026-09-25 已被主理人决议推翻**：默认改为 **`basic`**（`app/core/config.py:91` `search_depth: str = "basic"`、`app/search/quota.py:53` `DEFAULT_DEPTH = "basic"`）。推翻理由是**额度现实**：`advanced` 每次扣 2 credits，1000 credits/月的免费额度**实际只够约 500 次**，而用户是免费额度用户，额度耗尽的代价（研究中途降级）高于 basic 档的质量损失。改后约 1000 次。<br/>**注意这与原理由是同一权衡的两个方向，不是笔误**：原理由主张「质量优先于省额度」，新决议主张「额度可用性优先于质量」。两边记录都保留，不要只留其一。<br/>**`CREDITS_BY_DEPTH` 单价表未改**（两档都保留），用户可在 `.env` 显式设 `SEARCH_DEPTH=advanced` 切回质量优先。**「不接新供应商」这条未变**（仍只接 Tavily） |
+| Q3 | `search_depth` 是否改 `basic` | ~~**保留 `advanced`**，但改为可配置 `search_depth`（默认 `advanced`）+ 设置页明示「advanced = 2 credits / basic = 1 credits」，让用户自行切换降本。理由：研究产品的证据质量优先，为了省额度默认降级质量是本末倒置。**不接新供应商**~~ <br/><br/>⚠️ **2026-09-25 已被主理人决议推翻**：默认改为 **`basic`**（`app/core/config.py:91` `search_depth: str = "basic"`、`app/search/quota.py:53` `DEFAULT_DEPTH = "basic"`）。推翻理由是**额度现实**：`advanced` 每次扣 2 credits，额度上限 1000 credits/月时**实际只够约 500 次**，而用户是额度上限受限的部署，额度耗尽的代价（研究中途降级）高于 basic 档的质量损失。改后约 1000 次。<br/>**注意这与原理由是同一权衡的两个方向，不是笔误**：原理由主张「质量优先于省额度」，新决议主张「额度可用性优先于质量」。两边记录都保留，不要只留其一。<br/>**`CREDITS_BY_DEPTH` 单价表未改**（两档都保留），用户可在 `.env` 显式设 `SEARCH_DEPTH=advanced` 切回质量优先。**「不接新供应商」这条未变**（仍只接 Tavily） |
 | Q4 | `degraded` 报告是否还要人工确认 | **不需要额外交互**。`interrupt_before=["write"]` 已存在且是产品要求；`degraded` 的信息通过 ① SSE warning ② 中断前的 steps 记录 ③ 报告正文声明 三条到达用户。再加一个确认弹窗等于同一个决策问两遍 |
 | Q5 | 开发环境日志形态 | **`plain` 模式保留字段拼接**（`run=%s node=%s tool=%s`），不做完全降级。完全降级会让开发环境彻底失去可追溯性，而排查问题的主战场恰恰是开发环境。字段字典在同 §6.2 |
 | Q6 | 是否在 `write` 的 prompt 里注入「证据缺失」声明 | **必须做**（对应 P1-4，主理人已确认）。这是「降级在报告正文里可感知」的最后一块拼图。实现：`prompts.write_messages(..., evidence_gap_block: str \| None)`，非空时作为独立段落追加到 `_WRITE_USER`，措辞要求模型「显式声明证据缺失，不得给出需要联网核实的确定性数字」 |
@@ -1501,7 +1501,7 @@ graph LR
 
 两条测试合起来正好覆盖「Tavily 429 两义性」这个真实难点。`TavilySearchProvider` 里判定「余额是否充足」应读 `QuotaSnapshot.credits_remaining`，与预扣时的 `WHERE` 判定同源，避免两套口径。
 
-> 备注：原 AC-2 若保留，代价是 `rate_limit` 这个 kind 不存在，且「请求太频繁」也会被当成额度耗尽而拒绝重试一次。免费额度下可接受，但会丢失可诊断性，故不采用。
+> 备注：原 AC-2 若保留，代价是 `rate_limit` 这个 kind 不存在，且「请求太频繁」也会被当成额度耗尽而拒绝重试一次。在额度紧张时也可以接受，但会丢失可诊断性，故不采用。
 
 ### 11.2 PRD 描述与实际代码的差异清单
 

@@ -169,7 +169,7 @@ class Settings(BaseSettings):
     search_quota_soft_cap_ratio: float = 0.9
     # 单次 run 的搜索次数硬顶，防止一条 run 疯狂烧积分
     search_quota_per_run_cap: int = 12
-    # 默认 basic（1 credit/次）：1000 credits 的免费额度因此可以撑满 1000 次搜索
+    # 默认 basic（1 credit/次）：额度上限 1000 credits 时可以撑满 1000 次搜索
     # （advanced 只够约 500 次）。检索质量让位于「额度够用」——改成 advanced
     # 只需把这里（或 .env 的 SEARCH_DEPTH）换成 "advanced"，单价表两种档位都在。
     # 设置页需明示「advanced = 2 credits / basic = 1 credits」。
@@ -276,7 +276,7 @@ class Settings(BaseSettings):
 
     # ----- 生产加固：基础限流（防额度滥用）-----
     # 对昂贵的端点（LLM / 研究 / 图 / Agent）按客户端 IP 做进程内滑窗限流，
-    # 避免公开链接被刷爆免费 LLM Key 与 Tavily 搜索额度。
+    # 避免公开链接被刷爆大模型 API 额度 与 Tavily 搜索额度。
     # 默认关闭（本地开发/测试不受影响），生产 .env.production 打开。
     # ⚠️ 进程内实现，仅单 worker 语义正确（与配额一致，勿 --workers>1）。
     rate_limit_enabled: bool = False
@@ -286,7 +286,7 @@ class Settings(BaseSettings):
 
     # ----- 生产加固：每日运行预算（防额度滥用）-----
     # 和限流的互补关系：限流拦「短时间高频」，预算拦「不紧不慢刷一整天」
-    # （30 次/分钟 × 24h ≈ 4.3 万次调用，足以烧穿免费 LLM / Tavily 额度）。
+    # （30 次/分钟 × 24h ≈ 4.3 万次调用，足以烧穿大模型与搜索 API 额度）。
     # 按客户端 IP 统计**新建运行**的次数，超限返回 429（error.code = daily_budget_exceeded），
     # 自然日自动归零；只统计创建运行的端点，「继续/恢复已有运行」不计数。
     # 默认关闭（本地开发/测试不受影响），生产 .env.production 打开。

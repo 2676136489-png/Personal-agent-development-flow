@@ -104,8 +104,8 @@
 | P0-1 配额记账（预扣/结算/自然月窗口） | **已实现** | `app/search/quota.py` |
 | P0-7 `StubSearchProvider` 不计费 | 待验收 | `app/search/quota.py` 相关分支 |
 | Q7 模块命名 `app/search/` | **已实现** | `app/search/{quota.py,errors.py}` |
-| Q5 / P0-12 结构化日志、run 级追踪 | **未实现（`app/observability/` 目录不存在）** | 待建，约束见 §11.1 |
-| 其余 P0 / P1 条目 | 未实现 | 见第 7 章需求池 |
+| Q5 / P0-12 结构化日志、run 级追踪 | **已实现** | `app/observability/metrics.py`（计数器 / 直方图 + `/api/health` 快照） |
+| 其余 P0 / P1 条目 | 见第 7 章需求池 | 按轮次推进 |
 
 > **提醒**：`app/search/quota.py` 是本轮**唯一已落地的模块**，且它自己就约束了下游（单 worker 语义见 `quota.py:22-28`；run_id ContextVar 见 `:181-198`）。后续模块在引用它之前，请先确认这些既有约束是否约束到你自己。
 
@@ -149,7 +149,7 @@
 
 **这一条是本 PRD 的第一优先级，其余痛点都排在其后。**
 
-> 补充取证：Tavily 免费额度是 **1000 credits/月**，basic 搜索 1 credit、**advanced 搜索 2 credits**（Tavily 官方 Credits & Pricing）。而当前代码 `app/tools/search_provider.py:115` 硬编码 `"search_depth": "advanced"` —— 也就是说**实际可用搜索次数约 500 次，不是用户以为的 1000 次**。这条认知偏差本身就是「配额不可见」造成的第一重伤害。
+> 补充取证：Tavily 的额度计费是按月 **1000 credits**，basic 搜索 1 credit、**advanced 搜索 2 credits**（Tavily 官方 Credits & Pricing）。而当前代码 `app/tools/search_provider.py:115` 硬编码 `"search_depth": "advanced"` —— 也就是说**实际可用搜索次数约 500 次，不是用户以为的 1000 次**。这条认知偏差本身就是「配额不可见」造成的第一重伤害。
 
 ### P-2 【P0】额度成本无人记账：不知道一次研究花掉了多少
 
@@ -348,7 +348,7 @@
 
 | 方案 | 优点 | 问题 |
 | --- | --- | --- |
-| 进程内存 dict | 零成本 | ❌ **重启即归零** → 用户重启服务就能「刷新」免费额度。对按 credit 计费的外部服务来说，这个记账不成立，等于漏洞。 |
+| 进程内存 dict | 零成本 | ❌ **重启即归零** → 用户重启服务就能「刷新」额度。对按 credit 计费的外部服务来说，这个记账不成立，等于漏洞。 |
 | SQLite（**推荐**） | Python 内置 `sqlite3`，**零新依赖**；沿用 `app/rag/store.py` 已有的连接/WAL/close 范式与 `main.py:36-56` 的 `_close_sqlite_handles`；单机部署零运维；写入量极低（每次搜索 1 行 upsert） | 需处理多 worker 场景 |
 | 新依赖（Redis/SQLAlchemy） | — | ❌ 违反「不新增重量级依赖」约束 |
 
@@ -646,7 +646,7 @@ async def research_node(state, config) -> dict:
 # ----- Search quota -----
 search_quota_enabled: bool = True
 search_quota_db_path: str = "storage/search_quota.db"
-search_quota_monthly_credits: int = 1000        # Tavily Researcher 免费额度
+search_quota_monthly_credits: int = 1000        # Tavily 月度额度上限
 search_quota_warn_ratios: str = "0.5,0.75,0.9"  # 逗号分隔
 search_quota_policy: str = "degrade_annotate"   # degrade_annotate | hard_stop
 search_quota_soft_cap_ratio: float = 0.9
@@ -922,7 +922,7 @@ frontend-pm 问「SSE 事件的 `ts` 是服务端时间还是浏览器时间」�
 | --- | --- | --- | --- |
 | Q1 | 配额窗口：自然月 vs 30 天滚动 | **自然月**，`period_key` 用 `YYYY-MM`，时区固定 `+08:00` | `quota.py:121` `_period_key` / `:125` `_period_bounds` / `:57` `_TZ`；不改 |
 | Q2 | 多 worker（`--workers > 1`）下记账低估 | **只支持单 worker**；「DB 层原子累加 + 接受极小超支」这条备选**明确不采纳** | `quota.py:22-28` 文件头已写明进程内锁与「勿用 `--workers>1`」；`:691` 再次强调。**理由：记账正确性是该模块存在的唯一理由，不能拿它换并发度——把正确性从「可靠」降到「尽力」不可接受** |
-| Q3 | `search_depth` 是否改 `basic` | ~~**保留 `advanced`，但可配置**；「设置页明示 = 2 credits」由 `credits_per_call` + `search_depth_default` 两个字段承载，**不加额外文案分支**~~ <br/><br/>⚠️ **2026-09-25 主理人决议推翻：默认改为 `basic`**。推翻理由是额度现实——`advanced` 每次 2 credits，1000 credits/月实际只够约 500 次；用户为免费额度用户，额度耗尽的代价（研究中途降级）高于 basic 档的质量损失。改后约 1000 次。「设置页明示单价」的承载方式**不变**（仍由 `credits_per_call` + `search_depth_default` 两字段），但**其值现在应为 `1` / `"basic"`**（见 `:302-303` 的示例需按此理解）。`CREDITS_BY_DEPTH` 单价表两档保留，用户可 `.env` 显式设 `SEARCH_DEPTH=advanced` 切回质量优先 | `quota.py:51` `CREDITS_BY_DEPTH` / `:53` `DEFAULT_DEPTH` 已是配置入口；与 §3.4 展示契约一致 |
+| Q3 | `search_depth` 是否改 `basic` | ~~**保留 `advanced`，但可配置**；「设置页明示 = 2 credits」由 `credits_per_call` + `search_depth_default` 两个字段承载，**不加额外文案分支**~~ <br/><br/>⚠️ **2026-09-25 主理人决议推翻：默认改为 `basic`**。推翻理由是额度现实——`advanced` 每次 2 credits，1000 credits/月实际只够约 500 次；用户为额度上限受限的部署，额度耗尽的代价（研究中途降级）高于 basic 档的质量损失。改后约 1000 次。「设置页明示单价」的承载方式**不变**（仍由 `credits_per_call` + `search_depth_default` 两字段），但**其值现在应为 `1` / `"basic"`**（见 `:302-303` 的示例需按此理解）。`CREDITS_BY_DEPTH` 单价表两档保留，用户可 `.env` 显式设 `SEARCH_DEPTH=advanced` 切回质量优先 | `quota.py:51` `CREDITS_BY_DEPTH` / `:53` `DEFAULT_DEPTH` 已是配置入口；与 §3.4 展示契约一致 |
 | Q4 | `degraded` 报告是否新增交互 | **不加额外确认环节**，复用现有 `interrupt_before=["write"]`；`degraded` 在确认页以提示形式呈现 | 用户本来就要点一次，新增独立确认链会让「要不要确认」变成两次判断 |
 | Q5 | 开发环境日志形态 | `plain` 模式下**仍拼接 `run_id` / `tool` 等关键字**，不做完全降级 | 实施约束见 **§11.1** |
 | Q6 | `write` 节点是否注入「证据缺失」声明 | **做**，保持 P1-4 | 这是让降级在报告正文里可感知的最后一块拼图；不做的话，用户会在正文里读到一段没有来源的结论却意识不到是降级所致 |

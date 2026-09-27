@@ -210,12 +210,12 @@ class RunBudgetRegistry:
 
 
 class DailyRunBudgetMiddleware:
-    """按客户端 IP 的**每日运行预算**：公开站点防「细水长流式刷量」烧穿免费额度。
+    """按客户端 IP 的**每日运行预算**：公开站点防「细水长流式刷量」烧穿 API 额度。
 
     与 RateLimitMiddleware（分钟级滑窗）是互补的两道闸：
     - 限流拦的是「短时间高频」；
     - 预算拦的是「不紧不慢刷一整天」——30 次/分钟的上限放一天是 4.3 万次调用，
-      足以把免费 LLM Key 与 Tavily 额度全部烧光。
+      足以把大模型 API 与搜索额度全部烧光。
 
     只统计**创建一次昂贵运行**的端点（默认 `POST /api/graph/research` 与
     `POST /api/agent/run`），且用**精确路径匹配**：

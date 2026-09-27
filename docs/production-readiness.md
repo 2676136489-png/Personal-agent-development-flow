@@ -25,7 +25,7 @@
 | GZip 压缩 | 只对 `/assets` 静态挂载点启用 —— **不给全局加** `GZipMiddleware`，因为那会缓冲压缩 SSE 事件流。 |
 | 静态缓存策略 | `/assets/*`（内容哈希）→ `public, max-age=31536000, immutable`；`index.html` → `no-cache`。杜绝「部署后旧 HTML 指向已删 chunk → 白屏」。 |
 | 生产关闭 API 文档 | `API_DOCS_ENABLED=false` 时 `/api/docs`、`/api/openapi.json` 返回 404。 |
-| 昂贵端点限流 | 新增纯 ASGI `RateLimitMiddleware`（进程内滑窗，按客户端 IP），防刷爆免费 LLM Key 与 Tavily 额度；返回统一错误信封 + `Retry-After`。默认关，生产 `.env.production` 开。 |
+| 昂贵端点限流 | 新增纯 ASGI `RateLimitMiddleware`（进程内滑窗，按客户端 IP），防刷爆大模型 API 与搜索额度；返回统一错误信封 + `Retry-After`。默认关，生产 `.env.production` 开。 |
 | 可观测性接线 | 指标真正接入工具 / 搜索 / LLM / 图运行（详见 `tests/test_observability_wiring.py`）。 |
 | **`/api` 永不返回纯文本** | 新增最外层 `JsonErrorFallbackMiddleware`：外层中间件自身抛异常时也返回统一 JSON 信封（此前 Starlette 会回纯文本 `Internal Server Error`）。 |
 | **结构化输出容错** | `AgentDecision` 二选一从「硬失败」改为「能救则救 + 带修复提示重试一次」（详见 `tests/test_structured_repair.py`）。 |

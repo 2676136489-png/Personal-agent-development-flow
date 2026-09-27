@@ -166,7 +166,7 @@ class TavilySearchProvider:
 
     `search_depth` 由 `SEARCH_DEPTH` 配置决定，默认 `basic`：
     basic = 1 credit/次、advanced = 2 credits/次。默认走 basic 是为了让 Tavily
-    免费额度（1000 credits/月）能完整覆盖约 1000 次搜索；切回 advanced 会立刻
+    额度上限 1000 credits/月可完整覆盖约 1000 次搜索；切回 advanced 会立刻
     缩水到约 500 次。质量优先的场景可以在 .env 里显式设 `SEARCH_DEPTH=advanced`。
     """
 

@@ -6,7 +6,7 @@
 - LLM_PROVIDER=mock：所有 LLM 调用走 MockLLMClient，不产生真实模型调用，
   也不依赖外部付费服务（TestClient 下真实 AsyncOpenAI 还会触发 event-loop 问题）。
 - 清空 TAVILY_API_KEY：联网搜索回退到内置离线语料（含 example.com 等示例），
-  既免费又稳定，且能命中 test_tools 的离线断言。
+  既快又稳定，且能命中 test_tools 的离线断言。
 - [B36] 全部 SQLite 存储路径重定向到一次性临时目录：此前测试会话直接读写
   真实的 storage/agent_runs.db（run_store / events / quota / knowledge 全中），
   每跑一次 pytest 就往里写几十条运行记录。这些记录随后又被**原样打包部署**

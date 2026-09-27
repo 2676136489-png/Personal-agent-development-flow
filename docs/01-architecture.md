@@ -551,7 +551,7 @@ reports           最终报告
 |---|---|---|---|---|
 | D1 | Stage 1 数据库 | PostgreSQL（docker-compose 起，贴近生产） | SQLite（零依赖，先跑通） | **A + 逃生舱**：主用 Postgres，但 `DATABASE_URL` 支持切 SQLite，本机没 Docker 也能跑 |
 | D2 | LLM Provider | OpenAI 兼容层（换 base_url 适配多家） | 只接 OpenAI | **A**：你人在国内，兼容层能直接切 DeepSeek/通义/Moonshot，成本和学习收益都更高 |
-| D3 | 搜索 Provider | Tavily（真实，需 Key，有免费额度） | 只做离线 Mock | **A + Mock 兜底**：两个实现都写，没 Key 也能跑通闭环 |
+| D3 | 搜索 Provider | Tavily（真实搜索，需 Key） | 只做离线 Mock | **A + Mock 兜底**：两个实现都写，没 Key 也能跑通闭环 |
 | D4 | 是否 Stage 1 就做 RAG 向量检索 | 推迟到 Stage 3（先用关键词/全文检索） | Stage 1 就上 pgvector | **推迟**：先把闭环跑通；向量检索的价值在多文档积累后才显现 |
 | D5 | 前端 UI 方案 | Tailwind + 少量自研组件（克制、可控） | Ant Design（开箱即用、信息密度高） | **A**：更贴合"专业研究工具"气质，也更能学到东西；组件量在 Stage 1 很小 |
 | D6 | LangGraph 何时引入 | Stage 3/4（先手写状态机理解原理） | Stage 1 直接用 | **推迟**：先用 200 行显式状态机搞懂"状态/节点/边/中断"，再用框架才不会被框架绑架 |

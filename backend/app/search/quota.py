@@ -7,7 +7,7 @@ Tavily 的计费：
 - `advanced` = **2 credits / 次**
 
 当前默认 `search_depth="basic"`（见 `app/core/config.py`），因此 1000 credits 的
-免费额度可以完整覆盖 **约 1000 次**搜索。若把 `SEARCH_DEPTH` 切回 `advanced`，
+额度上限可完整覆盖 **约 1000 次**搜索。若把 `SEARCH_DEPTH` 切回 `advanced`，
 同额度立即缩水为约 500 次 —— 这个 2 倍差就是「配额不可见」造成的第一重伤害，
 所以口径必须写在这里、也写进 `/api/settings` 的返回值。
 
