@@ -26,10 +26,10 @@
 
 **前端**：React 18 + Vite 5 + TypeScript，依赖只有 5 个（react / react-dom / motion / react-markdown / remark-gfm）。没有路由库（用 hash 自己解析）、没有状态管理库、没有 UI 组件库。
 
-**模型**：
-- 线上跑智谱 GLM-4-Flash，本地开发用 Ollama + qwen3:8b
-- LLM 客户端抽象成四类：OpenAI 兼容 / Ollama / Mock / Fallback。没有 Key 时自动落到 Mock，全流程照样能跑通——这样没有 Key 的人 clone 下来也能看到完整界面
-- 联网搜索走 Tavily，配额记账按 credit 计，超了降级出报告但会明说
+**模型**：统一调用层把 provider 抽象出来，换后端只改配置、业务代码零改动。
+- 支持任意 OpenAI 兼容端点（线上用智谱 GLM-4-Flash）与本地推理后端，另有离线档位供不联网场景使用
+- 带自动兜底：主后端不可用时按配置切换，并给对方一段冷却期，避免每次调用都空等一次超时
+- 联网搜索走 Tavily，带配额记账（按 credit 计），超限时降级出报告但会明说
 
 **规模**：后端 75 个 py 文件 / 约 1.1 万行，前端 57 个 ts(x) 文件 / 约 7800 行，后端 237 个测试。
 
@@ -136,7 +136,7 @@ main.main → transform=matrix(1,0,0,1,0,0)   animation=page-in fill=both
 
 ### `db1bc2f` 修复线上配置全部静默失效
 
-线上一直以 development + Mock 运行。两个独立缺陷叠加：`env_file` 用了相对路径，而部署环境的工作目录不是 `backend/`，所有 `.env` 配置项静默失效；多配置文件优先级在部署场景下互相污染（上传不按 `.gitignore` 过滤，本地开发配置也上了服务器，且优先级更高）。改成按运行环境只读一个配置文件。
+线上环境一直跑在开发配置上。两个独立缺陷叠加：`env_file` 用了相对路径，而部署环境的工作目录不是 `backend/`，所有 `.env` 配置项静默失效；多配置文件优先级在部署场景下互相污染（上传不按 `.gitignore` 过滤，开发配置也上了服务器，且优先级更高）。改成按运行环境只读一个配置文件。
 
 ### `906312e` `.env.production` 退出 Git 追踪
 
@@ -158,13 +158,13 @@ FastAPI + LangGraph 后端，React 前端，架构与 PRD 文档。
 # 后端
 cd backend
 python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"   # macOS/Linux 用 .venv/bin/pip
-cp .env.example .env.local        # 不填 Key 也能跑：会自动落到 Mock 模式
+cp .env.example .env.local        # 按需填入模型与搜索的 API Key
 .venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
 
 # 前端
 cd frontend
 npm install
-npm run dev                       # 5173，通过 .env.local 里的 VITE_API_BASE_URL 指向后端
+npm run dev                       # 5173，通过 VITE_API_BASE_URL 指向后端
 ```
 
 测试与检查：

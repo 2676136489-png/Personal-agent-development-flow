@@ -135,7 +135,7 @@ function buildGroups(
             ? `每位访客 ${String(config.daily_run_budget_per_ip ?? '-')} 次/天`
             : '未开启',
         },
-        { label: '今日已用（本机）', value: budgetBar(budget) },
+        { label: '今日已用（本实例）', value: budgetBar(budget) },
         {
           label: '额度恢复',
           value:

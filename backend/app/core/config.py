@@ -31,9 +31,9 @@ def _select_env_files() -> tuple[Path, ...]:
     为什么要这么小心 —— 这里踩过一个很深的坑：
 
     托管沙箱上传时**不按 .gitignore 过滤**，`backend/` 下的所有文件原样上传，
-    包括本地开发用的 `.env`。而 `.env` 里 `LLM_BASE_URL` 指向
-    `http://127.0.0.1:11434/v1`（本地 Ollama），服务器上根本没有 Ollama，
-    于是线上每次都「网络连接失败」。
+    包括本地开发用的 `.env`。而 `.env` 里 `LLM_BASE_URL` 指向的是本机推理
+    服务（`http://127.0.0.1:*`），服务器上并没有那个服务，于是线上每次
+    调用都是「网络连接失败」。
 
     原来的设计是 `.env.production` 与 `.env` 同时读、靠后者优先，
     以为「本地 .env 覆盖部署配置」很方便。但只要本地 `.env` 被上传，
@@ -84,10 +84,10 @@ class Settings(BaseSettings):
     # ----- LLM -----
     #
     # 统一模型调用层（app/llm/client.py）支持的 provider：
-    #   ollama  = 本地 Ollama 原生 /api/chat（**默认**，模型 qwen3:8b）
+    #   ollama  = 本地推理后端，走 Ollama 原生 /api/chat
     #   openai  = 任何 OpenAI 兼容端点（DeepSeek / 通义 / Moonshot / 官方 OpenAI）
-    #   mock    = 离线假数据（本地开发 / CI）
-    #   auto    = 先试 Ollama，不可用时按 llm_fallback_provider 兜底，都没有则 Mock
+    #   mock    = 离线档位（不联网 / CI）
+    #   auto    = 按可用性自动选择，都不可用时按 llm_fallback_provider 兜底
     #
     # ⚠️ 切模型只改这一个值（+ 对应的一小组参数），业务代码零改动：
     #    所有调用点拿到的都是 LLMClient 协议对象，不知道底下是谁。
@@ -103,26 +103,26 @@ class Settings(BaseSettings):
     llm_max_attempts: int = 3
     llm_temperature: float = 0.2
     # 单次生成上限（token），OpenAI 兼容 provider 的默认预算。
-    # ⚠️ 不要低于 4096：GLM-4-Flash / qwen3 这类模型在长报告场景下，
-    # 2000 会在 JSON 中途被截断（finish_reason=length），表现为报告腰斩。
+    # ⚠️ 不要低于 4096：长报告场景下 2000 会在 JSON 中途被截断
+    # （finish_reason=length），表现为报告腰斩。
     llm_max_tokens: int = 4096
 
-    # ----- LLM：本地 Ollama（主模型 qwen3:8b）-----
+    # ----- 可选后端：本地推理（Ollama 原生接口）-----
     # Ollama 的原生地址（**不带 /v1**）：/api/chat 才能用到 keep_alive / think /
     # num_ctx 这些 OpenAI 兼容层没有的本地推理参数。
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:8b"
     # 模型常驻显存时长："5m" = 用完再留 5 分钟；"0" = 立即卸载（省内存，下次冷启动慢）
     ollama_keep_alive: str = "5m"
-    # qwen3 是思考型模型：关掉思考能显著降低首字延迟与推理 token 开销。
+    # 思考型模型可关掉思考，显著降低首字延迟与推理 token 开销。
     # 需要模型自己推理的场景（数学 / 复杂规划）可置 true。
     ollama_think: bool = False
     # 上下文窗口（token）。8B 模型建议 8192 起；内存充裕可上调到 16384/32768。
     ollama_num_ctx: int = 8192
     # 单次生成上限（token），等价于 OpenAI 的 max_tokens。
-    # 思考型模型请把推理预算也算进去，4096 是 qwen3:8b 结构化的安全下限。
+    # 思考型模型请把推理预算也算进去，4096 是结构化输出的安全下限。
     ollama_num_predict: int = 4096
-    # 本地 8B 模型首 token 就要几秒，超时必须远高于云端 API
+    # 本地推理首 token 较慢，超时要给得比云端 API 宽松
     ollama_timeout_seconds: float = 120.0
     # 主 provider 不可用时的兜底（"" = 不兜底，直接把错误抛给调用方）。
     # 线上环境没有 Ollama 时，配成 "openai" 即可无缝回落到云端模型。

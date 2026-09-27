@@ -6,7 +6,7 @@ import { StatusBadge } from '../../components/StatusBadge'
 /**
  * ModelPanel —— 「现在在调哪个模型」+ 一键自检。
  *
- * 为什么把它放在设置页最上面：换模型（本地 qwen3:8b ⇄ 云端）之后，
+ * 为什么把它放在设置页最上面：换模型（本地推理 ⇄ 云端 API）之后，
  * 排障的第一个问题永远是「到底生效了没有、通不通」。
  * 这里把配置（provider / 模型 / 超时 / 兜底）与实测（ping / 流式）放在一起，
  * 「配置写对了」和「模型确实能答」是两件不同的事，必须分别验证。
@@ -121,7 +121,7 @@ export function ModelPanel() {
         )}
       </div>
 
-      {/* 降级必须让用户看见：否则界面写着"本地 Ollama"，实际答案却是云端出的 */}
+      {/* 降级必须让用户看见：否则界面写着本地推理，实际答案却是云端出的 */}
       {info?.degraded && (
         <div className="panel-note panel-note--warn">
           <StatusBadge variant="warn">已降级</StatusBadge>

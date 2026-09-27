@@ -1,4 +1,4 @@
-# 统一模型调用层：DeepSeek → 本地 Ollama qwen3:8b
+# 统一模型调用层：多 provider 可切换
 
 > 代码：`backend/app/llm/client.py`、`backend/app/core/config.py`、`backend/app/api/routes/llm.py`
 > 配置：`LLM_PROVIDER` / `OLLAMA_*` / `LLM_FALLBACK_PROVIDER`
@@ -10,11 +10,12 @@
 | 之前 | 现在 |
 | --- | --- |
 | 只有一条路：`OpenAICompatibleClient` 打 DeepSeek | 注册表式多 provider：`ollama` / `openai`（兼容层）/ `mock` |
-| Ollama 只能借道 OpenAI 兼容层（`/v1`），本地专属参数全丢了 | 新增 `OllamaClient`，走 Ollama **原生** `/api/chat` |
+| 本地推理后端只能借道 OpenAI 兼容层（`/v1`），私有参数全丢了 | 新增 `OllamaClient`，走 Ollama **原生** `/api/chat` |
 | 主模型挂掉 = 整个应用不可用 | `FallbackLLMClient`：连接/超时/5xx 才兜底，且如实标注降级 |
 | 只有一次性返回 | `stream()` 进入 `LLMClient` 协议，Ollama / 兼容层都实现真流式 |
 
-**默认主模型已切换为本地 `qwen3:8b`**（`.env.local` 与 `.env.example` 的 `LLM_PROVIDER=ollama`）。
+**切换后端只改一行配置**：`LLM_PROVIDER=openai` 走任意 OpenAI 兼容端点，
+`=ollama` 走本地原生接口，`=mock` 用于离线与 CI，`=auto` 按可用性自动选。
 
 调用点全部不变：`get_llm_client()` 依旧返回 `LLMClient` 协议对象，
 LangGraph 节点、Planner、Agent 循环一行都没改 —— 这就是把差异收进 provider 的意义。
@@ -33,7 +34,7 @@ OpenAI 语义与 Ollama 原生字段不是一一对应的，翻译集中在 `Oll
 | `messages` | `messages` | 同为 `{role, content}` 列表 |
 | `options` 透传 | `options.*`（`num_ctx` / `stop` / `top_p`…） | 调用点可按需覆盖，不用改 client |
 | （无对应） | `keep_alive` | 模型常驻显存时长，`5m` 避免每次冷启动 |
-| （无对应） | `think` | qwen3 是思考型模型，关闭可显著降低延迟与推理 token |
+| （无对应） | `think` | 思考型模型可关闭思考，降低延迟与推理 token |
 | （无对应） | `options.num_ctx` | 上下文窗口，默认 8192 |
 
 ⚠️ **两个坑**
@@ -45,7 +46,7 @@ OpenAI 语义与 Ollama 原生字段不是一一对应的，翻译集中在 `Oll
 
 ## 3. 超时的适配
 
-| 场景 | 云端 API | 本地 8B 模型 | 本项目的取值 |
+| 场景 | 云端 API | 本地推理（8B 级） | 本项目的取值 |
 | --- | --- | --- | --- |
 | 首 token 延迟 | 0.3–1s | **2–8s**（模型还要从磁盘/显存加载） | — |
 | 完整一次结构化输出 | 1–5s | 8–40s（思考开着更久） | — |
@@ -57,7 +58,7 @@ OpenAI 语义与 Ollama 原生字段不是一一对应的，翻译集中在 `Oll
 - `AGENT_TOTAL_TIMEOUT_SECONDS=120`：一次 run 的墙钟上限
 - `TOOL_OUTPUT_MAX_CHARS=3000`：工具输出进上下文前的截断，防止把 `num_ctx` 撑爆
 
-> 实测（本机 qwen3:8b）：普通问答 686ms；结构化 JSON 一次成型；流式首块 <1s。
+> 实测（8B 级本地推理后端）：普通问答 686ms；结构化 JSON 一次成型；流式首块 <1s。
 
 ---
 
@@ -93,14 +94,14 @@ async for chunk in client.stream(request):   # chunk: LLMStreamChunk
 ## 5. 兜底链（换主模型不会把功能打挂）
 
 ```env
-LLM_PROVIDER=ollama          # 主模型
-LLM_FALLBACK_PROVIDER=openai # 兜底（线上沙箱没有 Ollama，必须配）
+LLM_PROVIDER=openai          # 主后端（任意 OpenAI 兼容端点）
+LLM_FALLBACK_PROVIDER=ollama # 可选兜底：云端不可用时落到本地推理
 ```
 
 `FallbackLLMClient` 的触发条件刻意收窄：
 
-- ✅ 兜底：`connection`（Ollama 没启动）/ `timeout` / `server`（5xx）
-- ❌ 不兜底：`invalid_request`（模型没 pull）/ 解析失败 / 业务性错误
+- ✅ 兜底：`connection`（后端未启动）/ `timeout` / `server`（5xx）
+- ❌ 不兜底：`invalid_request`（模型名不对等参数问题）/ 解析失败 / 业务性错误
 
 第二条是原则问题：静默换模型去掩盖业务逻辑错误，只会把故障藏得更深。
 

@@ -55,7 +55,7 @@ backend/app/
 │   ├── plan_store.py       研究计划历史
 │   └── sources.py          工具输出 → 可展示的依据来源
 ├── agent/                  智能体工作台：自主工具调用循环 + 运行历史
-├── llm/                    统一模型调用层（OpenAI 兼容 / Ollama / Mock / Fallback）
+├── llm/                    统一模型调用层（多家 provider 可切换 + 自动兜底）
 ├── rag/                    解析 → 切块 → 向量 → 检索 → 存储
 ├── search/                 搜索配额记账与额度决策
 ├── events/                 事件总线 + 落库（可回放）
@@ -78,7 +78,7 @@ frontend/src/
 # 后端
 cd backend
 python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"    # macOS / Linux 用 .venv/bin/pip
-cp .env.example .env.local        # 留空 Key 也能跑：会自动落到离线 Mock，全流程畅通
+cp .env.example .env.local        # 按需填入模型与搜索的 API Key
 .venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
 
 # 前端（另开终端）
@@ -89,10 +89,8 @@ npm run dev                       # 127.0.0.1:5173
 
 打开 http://127.0.0.1:5173 → **深度研究**。
 
-默认主模型是**本地 Ollama 的 `qwen3:8b`**（`LLM_PROVIDER=ollama`），需要本机已 `ollama serve`
-且 `ollama pull qwen3:8b`。本机没有 Ollama 也不会 500：会按 `LLM_FALLBACK_PROVIDER`
-回落到云端，或最终退化成离线 Mock（`LLM_PROVIDER=mock`）。
-切换模型只改 `.env` 里的 `LLM_PROVIDER`，业务代码零改动，详见 `docs/llm-provider.md`。
+模型层是可插拔的：填一个 OpenAI 兼容端点的 Key 即可直接跑，也支持本地推理后端与离线档位。
+切换只改 `.env` 里的 `LLM_PROVIDER`，业务代码零改动，详见 [`docs/llm-provider.md`](docs/llm-provider.md)。
 
 ---
 
