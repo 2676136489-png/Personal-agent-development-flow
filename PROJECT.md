@@ -154,6 +154,9 @@ FastAPI + LangGraph 后端，React 前端，架构与 PRD 文档。
 
 ## 六、本地怎么跑
 
+运行时数据默认落在项目根 `data/`（`backend/` 之外）——部署只上传后端代码，
+线上数据不会被打包覆盖。
+
 ```bash
 # 后端
 cd backend

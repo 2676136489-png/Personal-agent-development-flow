@@ -24,6 +24,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # 表现为「服务能起、但 Key 全没读到、悄悄退回 Mock」，极难排查。
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
+# 运行时数据（SQLite / 上传文件）的默认根目录：项目根下的 data/，**刻意放在 backend/ 之外**。
+#
+# 为什么不能放在 backend/storage：部署工具会把 backend/ 整个目录上传到服务器，
+# 于是「本地那份数据库」会覆盖掉线上正在用的那份 —— 线上历史记录、知识库、
+# 搜索配额全部被重置成开发者本机的快照。用户看到的就是「过一阵回来，历史没了」。
+# 放在 backend/ 之外，部署包里就不含运行时数据，线上数据不再被触碰。
+#
+# 顺带解决另一个坑：这里给的是**绝对路径**，不依赖进程当前工作目录。
+# 用相对路径时，`cd backend && uvicorn ...` 与从仓库根启动会解析到不同位置
+# （sandbox 的 CWD 是 /workspace，不是 backend/）。
+_DATA_ROOT = _BACKEND_ROOT.parent / "data"
+
 
 def _select_env_files() -> tuple[Path, ...]:
     """决定读哪些配置文件。只读**一个**，不做多文件叠加。
@@ -160,7 +172,7 @@ class Settings(BaseSettings):
     #
     # 计费口径（Tavily）：basic = 1 credit/次，advanced = 2 credits/次。
     search_quota_enabled: bool = True
-    search_quota_db_path: str = "storage/search_quota.db"
+    search_quota_db_path: str = str(_DATA_ROOT / "search_quota.db")
     # Tavily free tier = 1000 credits/月
     search_quota_monthly_credits: int = 1000
     search_quota_warn_ratios: str = "0.5,0.75,0.9"
@@ -189,13 +201,14 @@ class Settings(BaseSettings):
     log_format: str = "json"  # json | plain
 
     # ----- Knowledge base (RAG) -----
-    # SQLite 数据库文件与上传文件的存放位置（相对 backend/ 目录）
-    knowledge_db_path: str = "storage/knowledge.db"
-    storage_dir: str = "storage/documents"
+    # SQLite 数据库与上传文件的存放位置。默认落在 backend/ 之外的 data/ 下
+    # （理由见文件顶部 _DATA_ROOT 的说明），可用环境变量改成任意绝对路径。
+    knowledge_db_path: str = str(_DATA_ROOT / "knowledge.db")
+    storage_dir: str = str(_DATA_ROOT / "documents")
     # Agent 运行记录（LangGraph 之外的产品视角记录）
-    agent_runs_db_path: str = "storage/agent_runs.db"
+    agent_runs_db_path: str = str(_DATA_ROOT / "agent_runs.db")
     # Agent 事件流（SSE 回放 + 前端刷新恢复）
-    events_db_path: str = "storage/events.db"
+    events_db_path: str = str(_DATA_ROOT / "events.db")
     # SSE 心跳间隔（秒）。必须小于常见代理的空闲超时（通常 60s）。
     sse_heartbeat_seconds: float = 15.0
     # Research Graph 的默认循环上限。

@@ -89,6 +89,9 @@ npm run dev                       # 127.0.0.1:5173
 
 打开 http://127.0.0.1:5173 → **深度研究**。
 
+运行时数据（SQLite 与上传文件）默认写在项目根的 `data/`，刻意放在 `backend/` 之外：
+部署只上传后端代码，不会覆盖线上正在使用的数据。
+
 模型层是可插拔的：填一个 OpenAI 兼容端点的 Key 即可直接跑，也支持本地推理后端与离线档位。
 切换只改 `.env` 里的 `LLM_PROVIDER`，业务代码零改动，详见 [`docs/llm-provider.md`](docs/llm-provider.md)。
 
