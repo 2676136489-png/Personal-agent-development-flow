@@ -16,7 +16,7 @@ const path = require('node:path')
 const CHROME =
   'C:/Users/111/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe'
 const PORT = 9333
-const URL = process.argv[2] || 'https://ai-research-workspace.app.workbuddy.host/#/reports'
+const URL = process.argv[2] || 'https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/#/reports'
 const WIDTH = Number(process.argv[3] || 1280)
 const HEIGHT = Number(process.argv[4] || 720)
 

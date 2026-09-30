@@ -2,7 +2,7 @@
 
 写给以后回来看这个仓库的人，也写给我自己。README 讲的是「怎么跑起来」，这份文档讲的是「这东西是什么、为什么这么做」。
 
-**线上地址**：<https://ai-research-workspace.app.workbuddy.host/>
+**线上地址**：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/>
 
 ---
 
@@ -120,7 +120,20 @@ main.main → transform=matrix(1,0,0,1,0,0)   animation=page-in fill=both
 
 按时间倒序。每条都写了当时的动机——这些坑比代码本身更值得留着。
 
-### （本轮）深度研究可用性 + 智能体历史 + 前端交互修复
+### （本轮）线上环境重新发布
+
+原先那个发布实例在托管侧被移除了，旧域名不再解析，于是以新实例重新发布 `backend/`。
+
+- 当前线上地址：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/>
+- 发布参数：`language=python`、`installCmd=pip install .`、`startCmd=python start.py`
+- 单端口形态：FastAPI 同时提供前端产物与 `/api`，SPA 深链回退到 `index.html`
+- 关注点仍是数据安全：运行时数据在 `backend/` 之外（见 `cf26a69`），
+  重新发布不会把本地库文件带上线，也不会覆盖线上已有的记录
+
+顺手把 README 和本文件里残留的旧地址全量替换掉 —— 线上地址这种信息一旦过期，
+比没有更糟。
+
+### （上一轮）深度研究可用性 + 智能体历史 + 前端交互修复
 
 集中在「用户实际用起来别扭」的地方：
 

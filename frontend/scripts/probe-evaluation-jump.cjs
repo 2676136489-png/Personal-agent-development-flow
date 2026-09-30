@@ -16,7 +16,7 @@ const path = require('node:path')
 const CHROME =
   'C:/Users/111/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe'
 const PORT = 9334
-const BASE = (process.argv[2] || 'https://ai-research-workspace.app.workbuddy.host').replace(/\/$/, '')
+const BASE = (process.argv[2] || 'https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host').replace(/\/$/, '')
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
