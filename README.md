@@ -1,15 +1,14 @@
 # AI Research Workspace
 
-一个 **Evidence-first（证据优先）的 AI 研究工作台**。用户输入复杂研究任务，LangGraph 驱动的研究工作流自动理解任务、制定计划、调用工具（联网搜索 / 抓取网页 / 计算 / 查知识库）收集证据、分析、验证，在写报告前**中断等待人工确认**，最终产出带来源的研究报告。
+一个 **Evidence-first（证据优先）的 AI 研究工作台**。输入复杂研究任务，LangGraph 驱动的工作流自动理解任务、制定计划、调用工具（联网搜索 / 抓取网页 / 计算 / 查知识库）收集证据、分析、验证，在写报告前**中断等待人工确认**，产出带来源的研究报告。
 
 **在线地址：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/>**
 
-打开就能用，无需配置任何环境：模型接智谱 GLM-4-Flash，联网检索接 Tavily。
-线上是单端口托管 —— 前端产物由 FastAPI 一起提供，`/` 是页面、`/api/*` 是接口。
+打开就能用，无需配置环境：模型接智谱 GLM-4-Flash，联网检索接 Tavily。线上是单端口托管——前端产物由 FastAPI 一起提供，`/` 是页面、`/api/*` 是接口。
 
-> 当前状态：9 个模块均已可用（深度研究 / 研究规划 / 智能体 / 知识库 / 研究报告 / 效果评估 / 系统设置 / 使用教程 / 概览），后端 237 个测试通过。
-> 架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)。
-> 项目整体说明、关键设计取舍与提交记录见 [`PROJECT.md`](PROJECT.md)。
+![概览页](docs/images/overview-light.jpg)
+
+9 个模块均可用（概览 / 深度研究 / 研究规划 / 智能体 / 知识库 / 研究报告 / 效果评估 / 系统设置 / 使用教程），后端 237 个测试通过。架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)，项目整体说明与关键设计取舍见 [`PROJECT.md`](PROJECT.md)。
 
 ---
 
@@ -41,7 +40,25 @@ END
 
 ---
 
-## 2. 目录说明
+## 2. 界面
+
+| 深度研究 | 知识库 |
+|---|---|
+| ![深度研究](docs/images/research-workflow.jpg) | ![知识库](docs/images/knowledge-base.jpg) |
+
+| 智能体（深色） | 研究报告 |
+|---|---|
+| ![智能体](docs/images/agent-runner.jpg) | ![研究报告](docs/images/reports.jpg) |
+
+界面是冷调深空蓝，浅色与深色两套主题，配色不靠肉眼定——每个前景/背景组合的对比度都先算再选值（浅底正文 ≥5.0:1，深底 ≥6.5:1）。91 处颜色全部集中在 `styles/tokens.css`，业务 CSS 零硬编码，换主题只改令牌。
+
+深色主题：
+
+![深色概览](docs/images/overview-dark.jpg)
+
+---
+
+## 3. 目录说明
 
 ```
 backend/app/
@@ -76,11 +93,14 @@ frontend/src/
     ├── pages.css           页面级专属
     ├── responsive.css      响应式
     └── redesign.css        视觉层（氛围 / 组件重做，加载顺序最后）
+
+frontend/scripts/            CDP 探针：布局 / 视觉 / 跳转 / 文档截图
+docs/images/                 文档用首屏截图（由 docs-screenshots.cjs 生成）
 ```
 
 ---
 
-## 3. 启动
+## 4. 启动
 
 ```bash
 # 后端
@@ -105,7 +125,7 @@ npm run dev                       # 127.0.0.1:5173
 
 ---
 
-## 4. API
+## 5. API
 
 **深度研究（LangGraph 工作流）**
 
@@ -155,7 +175,7 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 
 ---
 
-## 5. 验证
+## 6. 验证
 
 | # | 项 | 方法 | 期望 |
 |---|---|---|---|
@@ -169,16 +189,17 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 | 8 | 布局与跳转 | `frontend/scripts/` 下的 CDP 探针脚本 | 元素几何 / 跳转落地状态符合断言 |
 | 9 | 视觉与可读性 | `node scripts/probe-visual-theme.cjs <地址> ""` | 双主题令牌 / 渐变 / 玻璃层 / 字体加载断言全绿 |
 | 10 | 细节点与对比度 | `node scripts/probe-visual-zoom.cjs <地址> dark` | hover 态对比度 ≥4.5:1、网格落到像素 |
+| 11 | 文档截图 | `node scripts/docs-screenshots.cjs <地址>` | `docs/images/` 下 7 张首屏图，页面已渲染完（非骨架屏） |
 
 配色不靠肉眼定：`tokens.css` 里每个前景/背景组合的对比度都是脚本实测的
-（浅底正文 ≥5.0:1，深底 ≥6.5:1）。第 9/10 项就是防止「改了样式但没真生效」——
-渐变被高优先级规则盖掉、字体声明了却没下载，这些都会被探针拦下。
+（浅底正文 ≥5.0:1，深底 ≥6.5:1）。第 9/10 项针对的是「改了样式但没真生效」——
+渐变被高优先级规则盖掉、字体声明了却没下载，这些光看计算样式发现不了，得进真浏览器。
 
 **实测结果**：`understand_task → plan → research ×3 → retrieve → analyze → verify`（中断）→ 批准 → `completed` + 报告；重启进程后仍能查到 `completed` 与报告（来自 `agent_runs` 落库）。
 
 ---
 
-## 6. 防失控的四道闸
+## 7. 防失控的四道闸
 
 | 闸 | 位置 | 作用 |
 |---|---|---|
@@ -189,7 +210,7 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 
 ---
 
-## 7. 中断与恢复机制
+## 8. 中断与恢复机制
 
 - 中断点：`interrupt_before=["write"]` —— **报告发布前必须人工确认**
 - 终态不可复活：`completed` / `cancelled` / `failed` 三种终态下再调 resume 返回 409
@@ -200,7 +221,7 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 
 ---
 
-## 8. 范围边界
+## 9. 范围边界
 
 这几条是**有意识划出去的**，不是待办：
 
@@ -209,7 +230,7 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 | Multi-Agent | 7 个节点共享同一份 State 和同一个 LLM client —— 它们是一个 Agent 的**阶段**。拆成多个 Agent 只是多一层消息传递与状态同步，职责并没有变化 |
 | 复杂 Memory | `messages` + State 里的 evidence 列表够用。向量记忆是另一个问题，和「结论能不能溯源」无关 |
 | 并行子问题检索 | 检索只占整轮耗时的零头，并行省不下时间，却要为 State 合并与「部分子问题失败」的收敛多加一层判断 |
-| 跨进程恢复 | 见 §7。换成 SQLite checkpointer 是配置级改动，等真有多实例需求再上 |
+| 跨进程恢复 | 见 §8。换成 SQLite checkpointer 是配置级改动，等真有多实例需求再上 |
 
 判据同样简单：新需求如果不同时增强「证据可溯源 / 过程可观察 / 结论可复核」这三条之一，就不进这一版。
 架构取舍的完整推演在 [`docs/01-architecture.md`](docs/01-architecture.md)。
