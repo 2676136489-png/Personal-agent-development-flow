@@ -62,3 +62,8 @@ storage/
 # 调试图省事把 pytest 输出重定向成文件时留下的转储，不该进仓库
 pytest_*.txt
 .pytest_*.txt
+
+# CDP 视觉探针的产物：截图 + report.json。每次跑都会重生成，
+# 而且截图是二进制，进仓库只会让 diff 全是噪声。
+frontend/.probe-visual/
+.probe-visual/

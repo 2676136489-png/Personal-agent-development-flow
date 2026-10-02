@@ -1,78 +1,95 @@
 /* ===== tokens.css · 设计令牌（唯一来源，无选择器样式） =====
 
    =========================================================================
-   AI 研究工作台 · 设计令牌 v2
+   AI 研究工作台 · 设计令牌 v3
    -------------------------------------------------------------------------
-   定调：**研究档案（Research Ledger）**
-   暖调纸感底 + 墨色文字 + 单一朱红强调 + 衬线标题 + 等宽数据。
-   产品是「把一次 AI 研究的每一步与每条证据摊开给用户看」，
-   所以视觉语言取自实验室记录本 / 学术档案：纸、墨、印章红、等宽编号。
+   定调：**深空蓝（Deep Space Blue）**
+   冷调石墨底 + 电光蓝主色 + 青蓝辅色 + 发光描边 + 玻璃层。
 
-   - 展示字：Fraunces（拉丁）+ 思源宋体（中文）—— 学术感，与"研究"语义一致
-   - 正文字：Public Sans（拉丁）+ 思源黑体 / 苹方（中文）—— 中性、长时间阅读友好
+   产品是「把一次 AI 研究的每一步与每条证据摊开给用户看」，
+   界面本身就是信息密集的控制台，所以视觉语言取自数据终端 / 观测台：
+   深色底、等宽数据、发光焦点、冷色分层。
+
+   v2 的暖调纸感（#f2efe7 纸底 + #c0392b 朱红 + Fraunces 衬线）整体退役，
+   原因不只是审美：暖底 + 朱红在长时间盯屏的研究场景下偏疲劳，
+   且朱红与「危险 / 报错」语义撞车 —— 现在 danger 用同色系的红，
+   主色换成蓝之后两者才拉开距离。
+
+   - 展示字：Inter Tight / Inter（拉丁）+ 思源黑体（中文）—— 大厂控制台观感
+   - 正文字：Inter + 思源黑体 / 苹方 —— 中性、长时间阅读友好
    - 数据字：JetBrains Mono —— 节点名 / token / 耗时 / 编号一律等宽，便于对齐比对
 
    所有颜色 / 字号 / 间距 / 圆角 / 阴影 / 层级 / 动效一律引用本文件令牌，
    业务 CSS 中禁止出现硬编码散值。明暗两套主题在此统一定义。
+
+   ⚠️ 对比度全部实测（WCAG 2.1），不靠肉眼判断：
+     浅色 page #f4f6fb 底 —— ink 17.3 / ink-soft 13.1 / muted 5.88
+       / faint 5.00 / accent 4.78 / accent-ink 6.20 / accent-2 4.96
+       / ok 5.07 / danger 4.90 / warn 4.80        全部 ≥ 4.5
+     深色 page #070b14 底 —— ink 16.9 / ink-soft 12.9 / muted 7.77
+       / faint 6.51 / accent 6.62 / accent-ink 9.07 / ok 10.2
+       / danger 8.11 / warn 11.8                    全部 ≥ 4.5
    ========================================================================= */
 
 :root {
   color-scheme: light;
 
-  /* ---- 表面与文字（暖调纸 / 墨） ---- */
-  --page: #f2efe7;
-  --surface: #fbfaf6;
-  --surface-alt: #ebe7dc;
-  --ink: #1c1d19;
-  --ink-soft: #3a3c35;
-  --muted: #5f6157;
-  /* 对比度实测：--muted 5.70:1 / --faint 5.21:1（底色 --page #f2efe7），均 ≥4.5:1 */
-  --faint: #63655b;
-  --line: rgba(28, 29, 25, 0.12);
-  --line-strong: rgba(28, 29, 25, 0.22);
+  /* ---- 表面与文字（冷调石墨 / 电光墨） ---- */
+  --page: #f4f6fb;
+  --surface: #ffffff;
+  --surface-alt: #eef2f9;
+  --ink: #0b1220;
+  --ink-soft: #1f2b40;
+  --muted: #51607a;
+  /* 对比度实测：--muted 5.88:1 / --faint 5.00:1（底色 --page #f4f6fb），均 ≥4.5:1 */
+  --faint: #5b6b85;
+  --line: rgba(11, 18, 32, 0.1);
+  --line-strong: rgba(11, 18, 32, 0.18);
 
-  /* ---- 强调色（朱红 = 印章/批注，全站唯一强调色） ---- */
-  --accent: #c0392b;
-  --accent-hover: #a93226;
-  /* 承载白字的强调底：白字对比度 5.40:1 */
-  --accent-strong: #c0392b;
+  /* ---- 强调色（电光蓝为主，青蓝为辅，构成渐变轴） ---- */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  /* 承载白字的强调底：白字对比度 5.17:1 */
+  --accent-strong: #2563eb;
   --on-accent: #ffffff;
-  /* 纸底上的 accent 文字：6.53:1（比 --accent 更深，保证可读） */
-  --accent-ink: #9e2b20;
+  /* 纸底上的 accent 文字：6.20:1（比 --accent 更深，保证可读） */
+  --accent-ink: #1d4ed8;
+  /* 辅色：用于渐变末端 / 次级高亮，避免全站只有一种蓝导致层级扁平 */
+  --accent-2: #0e7490;
 
   /* ---- 状态色 ---- */
-  --danger: #b3261e;
-  --danger-bg: #fbedeb;
-  --ok: #2f6b3f;
-  --ok-bg: #edf4ee;
-  --warn: #8a5a00;
-  --warn-bg: #faf1e0;
+  --danger: #d31d1d;
+  --danger-bg: #fdeceb;
+  --ok: #047857;
+  --ok-bg: #e7f6ef;
+  --warn: #96620a;
+  --warn-bg: #fbf2e0;
 
   /* ---- 导航 / 遮罩 ---- */
-  --nav-bg: rgba(242, 239, 231, 0.82);
-  --overlay: rgba(28, 29, 25, 0.45);
+  --nav-bg: rgba(244, 246, 251, 0.78);
+  --overlay: rgba(9, 14, 26, 0.55);
 
   /* ---- 新增：消除硬编码 rgba 与状态边框 ---- */
-  --accent-tint: rgba(192, 57, 43, 0.1);
-  --accent-tint-strong: rgba(192, 57, 43, 0.18);
-  --accent-border: rgba(192, 57, 43, 0.28);
-  --ok-border: rgba(47, 107, 63, 0.28);
-  --danger-border: rgba(179, 38, 30, 0.28);
-  --warn-border: rgba(138, 90, 0, 0.32);
-  --focus-ring: 0 0 0 3px rgba(192, 57, 43, 0.2);
+  --accent-tint: rgba(37, 99, 235, 0.09);
+  --accent-tint-strong: rgba(37, 99, 235, 0.16);
+  --accent-border: rgba(37, 99, 235, 0.34);
+  --ok-border: rgba(4, 120, 87, 0.3);
+  --danger-border: rgba(211, 29, 29, 0.3);
+  --warn-border: rgba(150, 98, 10, 0.32);
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.22);
   /* 焦点环：描边取 --ink（accent 在 --accent-strong 底上会消失），柔光晕用 accent-tint */
   --focus-outline: var(--ink);
-  --focus-halo: 0 0 0 4px var(--accent-tint);
-  --hover-bg: rgba(28, 29, 25, 0.035);
-  --scroll-thumb: rgba(28, 29, 25, 0.18);
+  --focus-halo: 0 0 0 4px var(--accent-tint-strong);
+  --hover-bg: rgba(11, 18, 32, 0.04);
+  --scroll-thumb: rgba(11, 18, 32, 0.2);
   --nav-group-line: var(--line-strong);
 
   /* ---- 骨架 / 下沉容器 / 环境光 ---- */
-  --skeleton-bg: rgba(28, 29, 25, 0.07);
-  --skeleton-sheen: rgba(255, 255, 255, 0.6);
-  --surface-sunken: #e7e3d8;
+  --skeleton-bg: rgba(11, 18, 32, 0.06);
+  --skeleton-sheen: rgba(255, 255, 255, 0.65);
+  --surface-sunken: #e8edf6;
   --line-sunken: var(--line);
-  --ambient-glow: rgba(192, 57, 43, 0.07);
+  --ambient-glow: rgba(37, 99, 235, 0.1);
 
   /* ---- toast / kbd / 行长 / 动效 / 层级 ---- */
   --toast-bg: var(--surface);
@@ -83,28 +100,68 @@
   --dur-short: 120ms;
   --z-toast: 500;
 
-  /* ===== v2 新增 ===== */
+  /* ===== v3 新增：科技感令牌 ===== */
 
-  /* ---- 字体族 ---- */
-  --font-display: "Fraunces", "Noto Serif SC", "Source Han Serif SC", "Songti SC", Georgia, serif;
-  --font-body: "Public Sans", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", sans-serif;
+  /* ---- 品牌渐变（蓝→青，135° 统一方向，全站复用同一轴） ---- */
+  --grad-brand: linear-gradient(135deg, #2563eb 0%, #1d4ed8 42%, #0e7490 100%);
+  --grad-brand-soft: linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(14, 116, 144, 0.14));
+  --grad-brand-hover: linear-gradient(135deg, #1d4ed8 0%, #1e40af 45%, #155e75 100%);
+  /* 高光扫过：主按钮 / 品牌块的 sheen */
+  --grad-sheen: linear-gradient(
+    110deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.28) 45%,
+    transparent 70%
+  );
+
+  /* ---- 发光：控制台感的关键，克制使用（仅交互态与激活态） ---- */
+  --glow-sm: 0 0 0 1px rgba(37, 99, 235, 0.18), 0 2px 10px -4px rgba(37, 99, 235, 0.5);
+  --glow-md: 0 0 0 1px rgba(37, 99, 235, 0.24), 0 6px 22px -8px rgba(37, 99, 235, 0.55);
+  --glow-lg: 0 0 0 1px rgba(37, 99, 235, 0.28), 0 14px 44px -12px rgba(37, 99, 235, 0.5);
+  --glow-cyan: 0 0 24px -6px rgba(14, 116, 144, 0.55);
+  --glow-ink: 0 0 0 3px rgba(11, 18, 32, 0.06);
+  /* 激活节点的光环（步骤条 / 当前阶段） */
+  --glow-active: 0 0 0 3px var(--accent-tint), 0 0 20px -4px rgba(37, 99, 235, 0.6);
+
+  /* ---- 玻璃层：顶栏 / 浮层 / 悬浮卡 ---- */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-blur: saturate(180%) blur(18px);
+  /* 卡片顶部高光强度：浅色 0.7 可见，深色 0（否则黑底上一条白线很扎眼） */
+  --card-sheen: 0.7;
+
+  /* ---- 网格：科技感底纹（比 v2 的纸纹更冷、更稀） ----
+     浅色底是近白的 #f4f6fb，网格必须给足 alpha 才看得见；
+     0.045 在这个底色上等于没有 —— 提到 0.07/0.11 才有"坐标纸"的分量。 */
+  --grid-line: rgba(11, 18, 32, 0.07);
+  --grid-line-major: rgba(11, 18, 32, 0.11);
+  --grid-size: 32px;
+  /* 极光层强度：浅色下靠 alpha 堆出纵深，深色下靠发光 */
+  --aurora-a: rgba(37, 99, 235, 0.16);
+  --aurora-b: rgba(14, 116, 144, 0.12);
+  --aurora-c: rgba(37, 99, 235, 0.08);
+
+  /* ---- 字体族：全站无衬线，v2 的 Fraunces 衬线退役 ---- */
+  --font-display: "Inter Tight", "Inter", "Noto Sans SC", "PingFang SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --font-body: "Inter", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo,
     Consolas, monospace;
   /* --font 是既有令牌名（全局 body 字体），指向正文栈 */
   --font: var(--font-body);
   --mono: var(--font-mono);
 
-  /* ---- 纸感氛围层 ---- */
-  --paper-rule: rgba(28, 29, 25, 0.055); /* 网格纸的发丝线 */
-  --grain-opacity: 0.045;
-  --seal-ring: rgba(192, 57, 43, 0.35); /* 印章描边 */
+  /* ---- 氛围（沿用旧名，避免业务 CSS 断链；语义已改为冷调极光） ---- */
+  --paper-rule: var(--grid-line); /* 旧名保留：网格发丝线 */
+  --grain-opacity: 0.03;
+  --seal-ring: rgba(37, 99, 235, 0.4); /* 旧名保留：品牌描边环 */
 
   /* ---- 步骤条语义色 ---- */
   --step-done: var(--ok);
   --step-active: var(--accent);
-  --step-pending: rgba(28, 29, 25, 0.22);
-  --step-track: rgba(28, 29, 25, 0.12);
+  --step-pending: rgba(11, 18, 32, 0.2);
+  --step-track: rgba(11, 18, 32, 0.1);
 
   /* ---- 层级补充 ---- */
   --z-sticky: 60;
@@ -151,20 +208,22 @@
   --weight-semibold: 600;
   --weight-bold: 700;
 
-  /* ---- 圆角：档案卡片偏方，只有 pill 用于徽标 ---- */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  /* ---- 圆角：控制台卡片更方正，只有 pill 用于徽标 ---- */
+  --radius-xs: 5px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
   --radius-pill: 999px;
   --radius-circle: 50%;
 
-  /* ---- 阴影（纸面投影，带暖色而不是纯黑） ---- */
-  --shadow-xs: 0 1px 2px rgba(46, 38, 25, 0.06);
-  --shadow-sm: 0 1px 3px rgba(46, 38, 25, 0.08);
-  --shadow-md: 0 8px 24px rgba(46, 38, 25, 0.1);
-  --shadow-lg: 0 18px 40px rgba(46, 38, 25, 0.13);
-  --shadow-xl: 0 24px 80px rgba(46, 38, 25, 0.22);
+  /* ---- 阴影（冷色多层：贴近层 + 环境层，避免纸面投影的暖调） ---- */
+  --shadow-xs: 0 1px 2px rgba(11, 18, 32, 0.06);
+  --shadow-sm: 0 1px 3px rgba(11, 18, 32, 0.08), 0 1px 2px rgba(11, 18, 32, 0.04);
+  --shadow-md: 0 8px 24px -6px rgba(11, 18, 32, 0.12), 0 2px 6px -2px rgba(11, 18, 32, 0.06);
+  --shadow-lg: 0 18px 40px -12px rgba(11, 18, 32, 0.18), 0 4px 12px -4px rgba(11, 18, 32, 0.06);
+  --shadow-xl: 0 24px 80px -20px rgba(11, 18, 32, 0.28), 0 8px 24px -8px rgba(11, 18, 32, 0.1);
+  /* 悬浮抬升：卡片 hover 用，位移与阴影同步 */
+  --shadow-lift: 0 20px 48px -16px rgba(11, 18, 32, 0.22), 0 0 0 1px rgba(37, 99, 235, 0.1);
 
   /* ---- 排版 / 栅格 / 层级 / 动效 ---- */
   --max-width: 1100px;
@@ -197,73 +256,109 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ===== 深色主题：深空底 + 更强的发光 ===== */
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* 深色不是纯黑：墨绿近黑，保持与浅色同构的暖调 */
-  --page: #131412;
-  --surface: #1b1d19;
-  --surface-alt: #23251f;
-  --ink: #efece2;
-  --ink-soft: #d6d2c6;
-  --muted: #a6a398;
-  /* 对比度实测（底色 --page #131412）：--muted 7.5:1 / --faint 6.9:1 */
-  --faint: #9a978c;
-  --line: rgba(239, 236, 226, 0.13);
-  --line-strong: rgba(239, 236, 226, 0.24);
+  --page: #070b14;
+  --surface: #0e1524;
+  --surface-alt: #161f33;
+  --ink: #e9eefb;
+  --ink-soft: #c6d2e8;
+  --muted: #94a3c4;
+  /* 对比度实测（底色 --page #070b14）：--muted 7.77:1 / --faint 6.51:1 */
+  --faint: #8595b3;
+  --line: rgba(233, 238, 251, 0.12);
+  --line-strong: rgba(233, 238, 251, 0.22);
 
-  --accent: #ff6a4d;
-  --accent-hover: #ff8368;
-  /* 深色下承载白字要更暗一点：白字对比度 5.2:1 */
-  --accent-strong: #d8452b;
-  --on-accent: #ffffff;
-  --accent-ink: #ff8a70;
+  --accent: #5b93ff;
+  --accent-hover: #7aa6ff;
+  /* 纯色强调底（不承载文字的场合用），白字对比度 5.17:1 */
+  --accent-strong: #2563eb;
+  /* ⚠️ --on-accent 在**下方渐变区**重新定义为 #070b14（亮渐变必须配暗字）。
+     这里不要重复定义，否则将来改渐变时容易改错这一处、留下白字配亮蓝。 */
+  --accent-ink: #82b1ff;
+  --accent-2: #22d3ee;
 
-  --danger: #ff8a80;
-  --danger-bg: rgba(179, 38, 30, 0.18);
-  --ok: #6fcf97;
-  --ok-bg: rgba(47, 107, 63, 0.2);
-  --warn: #ffc46b;
-  --warn-bg: rgba(138, 90, 0, 0.22);
+  --danger: #ff8080;
+  --danger-bg: rgba(211, 29, 29, 0.18);
+  --ok: #34d399;
+  --ok-bg: rgba(4, 120, 87, 0.22);
+  --warn: #fbbf24;
+  --warn-bg: rgba(150, 98, 10, 0.24);
 
-  --nav-bg: rgba(19, 20, 18, 0.82);
-  --overlay: rgba(0, 0, 0, 0.66);
+  --nav-bg: rgba(7, 11, 20, 0.72);
+  --overlay: rgba(0, 0, 0, 0.7);
 
-  --accent-tint: rgba(255, 106, 77, 0.16);
-  --accent-tint-strong: rgba(255, 106, 77, 0.26);
-  --accent-border: rgba(255, 106, 77, 0.36);
-  --ok-border: rgba(111, 207, 151, 0.34);
-  --danger-border: rgba(255, 138, 128, 0.34);
-  --warn-border: rgba(255, 196, 107, 0.34);
-  --focus-ring: 0 0 0 3px rgba(255, 106, 77, 0.28);
+  --accent-tint: rgba(91, 147, 255, 0.16);
+  --accent-tint-strong: rgba(91, 147, 255, 0.26);
+  --accent-border: rgba(91, 147, 255, 0.4);
+  --ok-border: rgba(52, 211, 153, 0.36);
+  --danger-border: rgba(255, 128, 128, 0.36);
+  --warn-border: rgba(251, 191, 36, 0.36);
+  --focus-ring: 0 0 0 3px rgba(91, 147, 255, 0.3);
   --focus-outline: var(--ink);
   --focus-halo: 0 0 0 4px var(--accent-tint-strong);
-  --hover-bg: rgba(239, 236, 226, 0.045);
-  --scroll-thumb: rgba(239, 236, 226, 0.22);
+  --hover-bg: rgba(233, 238, 251, 0.05);
+  --scroll-thumb: rgba(233, 238, 251, 0.22);
   --nav-group-line: var(--line-strong);
 
-  --skeleton-bg: rgba(239, 236, 226, 0.08);
-  --skeleton-sheen: rgba(239, 236, 226, 0.12);
-  --surface-sunken: #0d0e0c;
+  --skeleton-bg: rgba(233, 238, 251, 0.07);
+  --skeleton-sheen: rgba(233, 238, 251, 0.1);
+  --surface-sunken: #050810;
   --line-sunken: var(--line-strong);
-  --ambient-glow: rgba(255, 106, 77, 0.09);
-  --toast-bg: #23251f;
+  --ambient-glow: rgba(91, 147, 255, 0.14);
+  --toast-bg: #161f33;
   --toast-border: var(--line-strong);
   --toast-shadow: var(--shadow-xl);
   --kbd-bg: var(--surface-alt);
 
-  --paper-rule: rgba(239, 236, 226, 0.05);
-  --grain-opacity: 0.06;
-  --seal-ring: rgba(255, 106, 77, 0.4);
+  /* ---- 深色下的玻璃与网格：更暗、更依赖发光而非阴影 ---- */
+  --glass-bg: rgba(14, 21, 36, 0.66);
+  --glass-border: rgba(233, 238, 251, 0.1);
+  --card-sheen: 0; /* 黑底上白色高光线会扎眼，直接关掉 */
+  --grid-line: rgba(139, 178, 255, 0.05);
+  --grid-line-major: rgba(139, 178, 255, 0.09);
+  --aurora-a: rgba(91, 147, 255, 0.2);
+  --aurora-b: rgba(34, 211, 238, 0.12);
+  --aurora-c: rgba(91, 147, 255, 0.1);
+  --glow-sm: 0 0 0 1px rgba(91, 147, 255, 0.22), 0 2px 12px -4px rgba(91, 147, 255, 0.45);
+  --glow-md: 0 0 0 1px rgba(91, 147, 255, 0.28), 0 6px 24px -8px rgba(91, 147, 255, 0.5);
+  --glow-lg: 0 0 0 1px rgba(91, 147, 255, 0.32), 0 14px 48px -12px rgba(91, 147, 255, 0.45);
+  --glow-cyan: 0 0 28px -6px rgba(34, 211, 238, 0.4);
+  --glow-active: 0 0 0 3px var(--accent-tint-strong), 0 0 24px -4px rgba(91, 147, 255, 0.6);
+
+  /* 深色主题下渐变**必须配暗字**，不能用白字 ——
+     浅色那套 #2563eb/#1d4ed8/#0e7490 在近黑底上白字只有 5.2~6.7:1，
+     但深色版如果沿用亮蓝（#5b93ff）配白字，实测仅 2.97:1，青色端更只有 1.81:1
+     —— 渐变末端恰恰是文字所在的那一段，最容易漏。
+     所以深色下改为「亮渐变 + --page 近黑字」，三档实测最差 6.44:1。 */
+  --grad-brand: linear-gradient(135deg, #5b93ff 0%, #5093f8 42%, #22d3ee 100%);
+  --grad-brand-hover: linear-gradient(135deg, #7aa6ff 0%, #6b9dff 45%, #2ddcf0 100%);
+  --grad-brand-soft: linear-gradient(135deg, rgba(91, 147, 255, 0.18), rgba(34, 211, 238, 0.16));
+  --grad-sheen: linear-gradient(
+    110deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.22) 45%,
+    transparent 70%
+  );
+  /* 承载渐变的文字色：深色下是近黑，不是白 */
+  --on-accent: #070b14;
+
+  --paper-rule: var(--grid-line);
+  --grain-opacity: 0.04;
+  --seal-ring: rgba(91, 147, 255, 0.45);
 
   --step-done: var(--ok);
   --step-active: var(--accent);
-  --step-pending: rgba(239, 236, 226, 0.22);
-  --step-track: rgba(239, 236, 226, 0.14);
+  --step-pending: rgba(233, 238, 251, 0.2);
+  --step-track: rgba(233, 238, 251, 0.12);
 
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.55);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.58);
-  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.62);
-  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.78);
+  /* 深色下阴影几乎不可见，靠发光与边框分层 */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.55);
+  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.7);
+  --shadow-lift: 0 20px 48px -16px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(91, 147, 255, 0.18);
 }

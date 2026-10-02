@@ -11,7 +11,9 @@
 
 /* ============================== ① 氛围层 ============================== */
 
-/* 纸感底：极淡的网格 + 两团环境光。不用纯色平铺。 */
+/* 深空底：左上蓝、右上青两团极光 + 底部反光。
+   不用纯色平铺 —— 平面色在长文本场景下太"死"，渐变带来纵深。
+   三团光的强度走 --aurora-* 令牌：浅色底近白，必须给足 alpha 才看得出层次。 */
 body::before {
   content: "";
   position: fixed;
@@ -19,11 +21,13 @@ body::before {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(64rem 40rem at 8% -12%, var(--ambient-glow), transparent 62%),
-    radial-gradient(48rem 34rem at 102% 4%, var(--accent-tint), transparent 58%);
+    radial-gradient(64rem 40rem at 4% -14%, var(--aurora-a), transparent 62%),
+    radial-gradient(52rem 36rem at 104% 2%, var(--aurora-b), transparent 60%),
+    radial-gradient(46rem 30rem at 50% 108%, var(--aurora-c), transparent 64%);
 }
 
-/* 网格纸发丝线：24px 栅格，透明度极低，只提供质感不抢内容 */
+/* 科技网格：32px 细栅格 + 每 4 格一条主线，顶部淡出。
+   两条线用不同透明度，主线才有"坐标轴"感而不显杂乱。 */
 body::after {
   content: "";
   position: fixed;
@@ -32,10 +36,16 @@ body::after {
   z-index: 0;
   opacity: 0.9;
   background-image:
-    linear-gradient(to right, var(--paper-rule) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--paper-rule) 1px, transparent 1px);
-  background-size: 24px 24px;
-  mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 60%, transparent);
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to right, var(--grid-line-major) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line-major) 1px, transparent 1px);
+  background-size:
+    var(--grid-size) var(--grid-size),
+    var(--grid-size) var(--grid-size),
+    calc(var(--grid-size) * 4) calc(var(--grid-size) * 4),
+    calc(var(--grid-size) * 4) calc(var(--grid-size) * 4);
+  mask-image: linear-gradient(to bottom, transparent, #000 10%, #000 55%, transparent);
 }
 
 /* 内容层抬到氛围层之上 */
@@ -49,8 +59,9 @@ main {
 /* ============================== ② 顶栏 ============================== */
 
 .global-nav {
-  background: var(--nav-bg);
-  backdrop-filter: saturate(160%) blur(14px);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--line);
   box-shadow: none;
   transition: box-shadow var(--dur-base) var(--ease), border-color var(--dur-base) var(--ease);
@@ -67,33 +78,50 @@ main {
   gap: var(--space-2);
   font-family: var(--font-display);
   font-size: var(--text-lg);
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--ink);
 }
 
-/* 品牌标记：印章感 —— 朱红描边方章 + 等宽缩写 */
+/* 品牌标记：渐变方块 + 扫光 —— 大厂产品标识的通用做法（蓝→青渐变 + 内高光） */
 .nav-logo {
   display: inline-grid;
   place-items: center;
   min-width: 34px;
   height: 26px;
   padding: 0 6px;
-  border: 1.5px solid var(--accent);
+  border: 0;
   border-radius: var(--radius-xs);
-  color: var(--accent-ink);
+  color: #ffffff;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  background: var(--accent-tint);
+  background: var(--grad-brand);
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--glow-sm);
   transform: translateY(1px);
-  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  transition: box-shadow var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+
+/* 扫光：hover 时一道 110° 高光掠过标识（GPU 合成，不触发重排） */
+.nav-logo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--grad-sheen);
+  transform: translateX(-120%);
+  transition: transform 620ms var(--ease-out-expo);
 }
 
 .nav-brand:hover .nav-logo {
-  background: var(--accent);
-  color: var(--on-accent);
+  box-shadow: var(--glow-md);
+  transform: translateY(1px) scale(1.04);
+}
+
+.nav-brand:hover .nav-logo::after {
+  transform: translateX(120%);
 }
 
 .nav-brand small {
@@ -112,21 +140,41 @@ main {
   color: var(--faint);
 }
 
+/* 基础态先写，激活态必须**在它之后** ——
+   同为 (0,1,0) 优先级，后写的赢。顺序反了的话 .nav-link 的
+   color:var(--muted) 会盖掉激活态的 --on-accent，症状是「渐变深底 + 暗色字」，
+   探针实测对比度只有 1.23:1（真踩过，别再调回这个顺序）。 */
 .nav-link {
   position: relative;
   border-radius: var(--radius-pill);
   color: var(--muted);
   font-weight: 500;
-  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
 }
 
-.nav-link:hover {
+/* 激活态：蓝→青渐变胶囊 + 外发光 —— 当前页在深空底上一眼可见。
+   三种激活类合成一条，避免以后新增变体又漏掉颜色。 */
+.nav-link--active,
+.nav-link--primary.nav-link--active,
+.nav-link--dev.nav-link--active {
+  color: var(--on-accent);
+  background: var(--grad-brand);
+  box-shadow: var(--glow-sm);
+}
+
+/* hover 只作用于非激活项：激活项是渐变深底 + 白字，
+   被 hover 改成深色文字就会出现「深底深字」。 */
+.nav-link:hover:not(:disabled):not(.nav-link--active) {
   color: var(--ink);
   background: var(--hover-bg);
 }
 
-/* 激活态视觉统一由 layout.css 的朱红胶囊承担，这里不再叠加下划线/加粗描边。
-   注意：redesign.css 与 layout.css 都曾定义 .nav-link--active，现以 layout.css 为准。 */
+/* 主推项：未激活时也带一点品牌色，提示这是主入口 */
+.nav-link--primary {
+  color: var(--accent-ink);
+  font-weight: 600;
+}
 
 .nav-link__badge {
   background: var(--accent);
@@ -188,10 +236,12 @@ p { line-height: var(--leading-relaxed); }
 
 .button {
   border-radius: var(--radius-sm);
-  font-weight: 500;
+  font-weight: 600;
   border: 1px solid var(--line-strong);
   background: var(--surface);
   color: var(--ink);
+  position: relative;
+  overflow: hidden;
   transition:
     background var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease),
@@ -201,7 +251,7 @@ p { line-height: var(--leading-relaxed); }
 
 .button:hover:not(:disabled) {
   border-color: var(--accent-border);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glow-sm);
   transform: translateY(-1px);
 }
 
@@ -214,16 +264,33 @@ p { line-height: var(--leading-relaxed); }
   cursor: not-allowed;
 }
 
+/* 主按钮：品牌渐变 + 外发光。这是全站唯一大面积用渐变的地方，
+   保持"只有一个主操作"的视觉权威。 */
 .button--primary {
-  background: var(--accent-strong);
+  background: var(--grad-brand);
   color: var(--on-accent);
   border-color: transparent;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glow-md);
 }
 
 .button--primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  box-shadow: var(--shadow-md);
+  background: var(--grad-brand-hover);
+  box-shadow: var(--glow-lg);
+}
+
+/* 主按钮扫光：hover 时高光掠过（transform 驱动，不触发布局） */
+.button--primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--grad-sheen);
+  transform: translateX(-120%);
+  transition: transform 620ms var(--ease-out-expo);
+  pointer-events: none;
+}
+
+.button--primary:hover:not(:disabled)::before {
+  transform: translateX(120%);
 }
 
 /* 主按钮加载态：左侧一个走马灯进度条，比转圈更贴合"流水线"语义 */
@@ -252,24 +319,46 @@ p { line-height: var(--leading-relaxed); }
 
 /* ============================== ⑤ 卡片 ============================== */
 
+/* 卡片：白底 + 冷色分层阴影。顶部一道极细高光让卡片有"厚度"，
+   这是大厂控制台卡片最省力也最有效的一招。 */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-xs);
+  position: relative;
   transition:
     transform var(--dur-base) var(--ease-out-expo),
     box-shadow var(--dur-base) var(--ease-out-expo),
     border-color var(--dur-base) var(--ease);
 }
 
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.9),
+    transparent
+  );
+  /* 深色主题下这条白色高光会变成一条可见的亮线（底色本就接近黑），
+     所以改由令牌决定强弱，深色下自动压到几乎不可见。 */
+  opacity: var(--card-sheen);
+  pointer-events: none;
+}
+
 .card--interactive:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lift);
   border-color: var(--accent-border);
 }
 
-/* 入口卡：图标改为"档案夹角标"，主卡带朱红左边框 */
+/* 入口卡：主卡带渐变左边框 + 顶部微光，把"推荐入口"一眼分出来。
+   用 ::after 画左边框而不是 border-image —— border-image 会把四条边一起接管，
+   连带圆角一起失效；伪元素只占左侧 3px，圆角与上边框都不受影响。 */
 .card--entry {
   display: flex;
   flex-direction: column;
@@ -280,7 +369,19 @@ p { line-height: var(--leading-relaxed); }
 }
 
 .card--primary {
-  border-left: 3px solid var(--accent);
+  position: relative;
+}
+
+.card--primary::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--grad-brand);
+  box-shadow: var(--glow-cyan);
 }
 
 .card__icon {
@@ -298,6 +399,7 @@ p { line-height: var(--leading-relaxed); }
 .card--primary .card__icon {
   border-color: var(--accent-border);
   background: var(--accent-tint);
+  color: var(--accent);
 }
 
 .card__title {
@@ -327,7 +429,8 @@ p { line-height: var(--leading-relaxed); }
 .badge--warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-border); }
 .badge--info { background: var(--accent-tint); color: var(--accent-ink); border-color: var(--accent-border); }
 
-/* 运行中的呼吸点：让"在跑"这件事一眼可见 */
+/* 运行中的呼吸点：让"在跑"这件事一眼可见。
+   圆点带光晕 + 呼吸扩散，代替纯 opacity 闪烁 —— 纯闪烁在深色底上刺眼。 */
 .badge--running {
   background: var(--accent-tint);
   color: var(--accent-ink);
@@ -343,12 +446,21 @@ p { line-height: var(--leading-relaxed); }
   height: 6px;
   border-radius: var(--radius-circle);
   background: var(--accent);
-  animation: pulse-dot 1.4s var(--ease) infinite;
+  box-shadow: 0 0 8px 1px var(--accent-border);
+  animation: pulse-dot 1.6s var(--ease) infinite;
 }
 
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.7); }
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 var(--accent-tint-strong);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(0.82);
+    box-shadow: 0 0 0 5px transparent;
+  }
 }
 
 /* ============================== ⑦ v2：PageHeader ============================== */
@@ -360,7 +472,7 @@ p { line-height: var(--leading-relaxed); }
   margin-bottom: var(--space-6);
 }
 
-/* 页头左侧的朱红竖线 —— 全站统一的"章节起始"记号 */
+/* 页头左侧的渐变竖线 —— 全站统一的"章节起始"记号 */
 .page-head::before {
   content: "";
   position: absolute;
@@ -368,8 +480,9 @@ p { line-height: var(--leading-relaxed); }
   top: var(--space-6);
   bottom: var(--space-5);
   width: 2px;
-  background: var(--accent);
+  background: var(--grad-brand);
   border-radius: 2px;
+  box-shadow: var(--glow-cyan);
 }
 
 .page-head__title {
@@ -504,17 +617,17 @@ p { line-height: var(--leading-relaxed); }
 }
 
 .stepper__item--active .stepper__dot {
-  border-color: var(--step-active);
+  border-color: transparent;
   color: var(--on-accent);
-  background: var(--accent-strong);
+  background: var(--grad-brand);
   transform: scale(1.12);
-  box-shadow: 0 0 0 4px var(--accent-tint);
+  box-shadow: var(--glow-active);
   animation: step-breathe 2s var(--ease) infinite;
 }
 
 @keyframes step-breathe {
-  0%, 100% { box-shadow: 0 0 0 4px var(--accent-tint); }
-  50% { box-shadow: 0 0 0 8px var(--accent-tint); }
+  0%, 100% { box-shadow: 0 0 0 3px var(--accent-tint), 0 0 18px -4px rgba(37, 99, 235, 0.6); }
+  50% { box-shadow: 0 0 0 7px var(--accent-tint), 0 0 28px -2px rgba(37, 99, 235, 0.7); }
 }
 
 .stepper__item--error .stepper__dot {
@@ -896,13 +1009,37 @@ p { line-height: var(--leading-relaxed); }
   color: var(--faint);
 }
 
-/* hero 视觉：自绘 SVG 流水线所在的面板 */
+/* hero 视觉：自绘 SVG 流水线所在的面板。
+   这是首屏最大的一块"白"，不给层次整页就会发平 —— 用玻璃底 + 顶部渐变高光带。 */
 .hero-visual {
   margin-top: var(--space-7);
   padding: var(--space-6) var(--space-5);
-  background: var(--surface);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 顶部一道渐变高光带：面板边缘的"玻璃厚度"，比纯白更像一块仪表盘 */
+.hero-visual::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--grad-brand);
+  opacity: 0.85;
+}
+
+.hero-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(60% 100% at 50% 0%, var(--accent-tint), transparent 70%);
 }
 
 .pipeline {

@@ -48,9 +48,8 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  /* F1：白字底色改 --accent-strong（M1） */
-  background: var(--accent-strong);
-  color: var(--on-accent);
+  background: var(--grad-brand);
+  color: #ffffff;
   font-weight: 700;
   font-size: var(--text-xs);
   letter-spacing: -0.02em;
@@ -118,26 +117,30 @@
     box-shadow var(--dur-fast) var(--ease);
 }
 
-.nav-link:hover:not(:disabled) {
+/* hover 只作用于非激活项：激活项是渐变深底 + 白字，
+   被 hover 改成深色文字会出现「深底深字」。规则与 redesign.css 保持一致。 */
+.nav-link:hover:not(:disabled):not(.nav-link--active) {
   color: var(--ink);
   background: var(--surface-alt);
 }
 
-/* 激活态：统一的朱红胶囊（与全站 accent 体系一致），不再叠加下划线/加粗描边 */
+/* 激活态：蓝→青渐变胶囊 + 发光（视觉细节由 redesign.css 的 --glow 承担）。
+   这是「当前在哪一页」的唯一常驻指示，浅色/深色都必须一眼可见。 */
 .nav-link--active {
-  color: var(--accent-ink);
+  color: var(--on-accent);
   font-weight: 600;
-  background: var(--accent-tint);
+  background: var(--grad-brand);
+  box-shadow: var(--glow-sm);
 }
 
-/* 主推项：常驻 accent 文字，激活时叠胶囊底 */
+/* 主推项：常驻品牌色文字，激活时叠渐变胶囊底 */
 .nav-link--primary {
   color: var(--accent-ink);
   font-weight: 600;
 }
 
 .nav-link--primary.nav-link--active {
-  color: var(--accent-ink);
+  color: var(--on-accent);
 }
 
 .nav-link__badge {
@@ -152,7 +155,7 @@
 }
 
 /* 开发者向：顶栏里与常规项同色（保持一行一致），"开发者向"提示只在抽屉里出现。
-   激活时仍给朱红胶囊，保证「当前页」高亮始终可见（否则停留在设置/评估页时无指示） */
+   激活时仍给渐变胶囊，保证「当前页」高亮始终可见（否则停留在设置/评估页时无指示） */
 .nav-link--dev {
   color: var(--muted);
   font-weight: 400;
@@ -160,9 +163,10 @@
 }
 
 .nav-link--dev.nav-link--active {
-  color: var(--accent-ink);
+  color: var(--on-accent);
   font-weight: 600;
-  background: var(--accent-tint);
+  background: var(--grad-brand);
+  box-shadow: var(--glow-sm);
 }
 
 /* 顶栏不显示"开发者向 / 推荐角标"之外的次要提示，避免拥挤；抽屉里照常显示 */
@@ -505,15 +509,30 @@ section {
 }
 
 /* ============ Page / Panel（工具页面容器） ============ */
-/* .page 为统一页面容器基线；.panel 保留为等价别名（现有 JSX 不变） */
+/* .page 为统一页面容器基线；.panel 保留为等价别名（现有 JSX 不变）
+   玻璃层：半透明底 + 顶部高光，让页面像一块悬浮的仪表盘浮在极光上。 */
 
 .page,
 .panel {
   width: 100%;
-  background: var(--surface);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   padding: var(--space-6);
+  position: relative;
+  box-shadow: var(--shadow-md);
+}
+
+.page::before,
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--glass-border), transparent);
+  pointer-events: none;
 }
 
 /* V7：22px → --space-6(24px)；26px → --space-7(32px) 见 .module-section */
