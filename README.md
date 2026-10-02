@@ -68,7 +68,14 @@ frontend/src/
 ├── features/               9 个页面：概览 / 深度研究 / 研究规划 / 智能体 / 知识库 / 研究报告 / 效果评估 / 系统设置 / 使用教程
 ├── components/             通用组件（步骤条、时间线、证据面板、Toast…）
 ├── api/                    唯一 HTTP 出口（SSE 与轮询共用同一条数据链路）
-└── styles/                 设计 token + 分层样式
+└── styles/                 设计令牌 + 分层样式
+    ├── tokens.css          唯一颜色来源（明暗双主题 + 渐变/发光/玻璃令牌）
+    ├── base.css            reset / 焦点环 / 页面转场
+    ├── layout.css          壳层 / 容器 / 栅格
+    ├── components.css      可复用组件
+    ├── pages.css           页面级专属
+    ├── responsive.css      响应式
+    └── redesign.css        视觉层（氛围 / 组件重做，加载顺序最后）
 ```
 
 ---
@@ -160,6 +167,12 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 | 6 | 静态检查 | `.venv/Scripts/python -m ruff check app tests` | `All checks passed!` |
 | 7 | 前端类型 | `npm run typecheck` | 无输出 |
 | 8 | 布局与跳转 | `frontend/scripts/` 下的 CDP 探针脚本 | 元素几何 / 跳转落地状态符合断言 |
+| 9 | 视觉与可读性 | `node scripts/probe-visual-theme.cjs <地址> ""` | 双主题令牌 / 渐变 / 玻璃层 / 字体加载断言全绿 |
+| 10 | 细节点与对比度 | `node scripts/probe-visual-zoom.cjs <地址> dark` | hover 态对比度 ≥4.5:1、网格落到像素 |
+
+配色不靠肉眼定：`tokens.css` 里每个前景/背景组合的对比度都是脚本实测的
+（浅底正文 ≥5.0:1，深底 ≥6.5:1）。第 9/10 项就是防止「改了样式但没真生效」——
+渐变被高优先级规则盖掉、字体声明了却没下载，这些都会被探针拦下。
 
 **实测结果**：`understand_task → plan → research ×3 → retrieve → analyze → verify`（中断）→ 批准 → `completed` + 报告；重启进程后仍能查到 `completed` 与报告（来自 `agent_runs` 落库）。
 

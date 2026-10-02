@@ -39,11 +39,16 @@
 ## 🔧 待办（P1，上线前后尽快）
 
 ### 前端
-- **字体来源风险**：当前从 `fonts.googleapis.com` 拉 Fraunces / Public Sans / JetBrains Mono。国内网络对该域可能不可达或不稳定，且外链 CSS **阻塞首屏渲染**。建议二选一：
+- **字体来源风险**：当前从 `fonts.googleapis.com` 拉 Inter / Inter Tight / JetBrains Mono。国内网络对该域可能不可达或不稳定，且外链 CSS **阻塞首屏渲染**。建议二选一：
   1. 自托管 woff2（放 `public/fonts/` + `@font-face`），彻底消除外链；或
-  2. 反正文字栈已有系统回退（思源宋体/苹方/等宽），直接移除外链、改用系统字体。
+  2. 反正文字栈已有系统回退（思源黑体/苹方/等宽），直接移除外链、改用系统字体。
+  > ⚠️ 改字体时**必须同时改两处**：`index.html` 的 `<link href="fonts.googleapis.com/...">`
+  > 外链，与 `tokens.css` 的 `--font-display` / `--font-body` / `--font-mono`。
+  > 只改后者的话，外链还在拉旧字体、新字体从未下载，计算样式照样显示新字体名，
+  > **实际渲染静默回退系统字体**，肉眼很难发现（探针 `probe-visual-theme.cjs`
+  > 的「字体真被加载」断言就是为拦住这个而加的）。
 - **深色主题首屏闪烁**：深色用户刷新时先见浅色再切深色。彻底修复需在 `<head>` 内联极小脚本读 `localStorage` —— 但会与当前严格 CSP（`script-src 'self'`）冲突，需给该脚本加 `hash`/`nonce` 或放宽 CSP。
-- **无自动化可访问性 / 视觉回归**：建议接入 axe + 截图回归（可选）。
+- **视觉回归已有探针，a11y 仍缺**：配色/渐变/玻璃层/字体加载已由 `frontend/scripts/probe-visual-theme.cjs` 与 `probe-visual-zoom.cjs` 覆盖（双主题 + 对比度断言）；尚未接入 axe 等自动化可访问性扫描。
 
 ### 后端
 - **长请求可能触发网关超时（重点）**：`POST /api/graph/research`、`POST /api/agent/run` 会**同步阻塞**直到整段流程跑完（研究图到「写报告前中断」为止，可能 30–120s）。若反向代理的读超时更短，代理会回一个 **HTML 错误页**（502/504）→ 前端看到「非 JSON 响应」。

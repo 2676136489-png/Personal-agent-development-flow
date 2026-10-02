@@ -10,20 +10,24 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- 声明支持明暗两套配色；浏览器据此渲染表单控件/滚动条与地址栏 -->
     <meta name="color-scheme" content="light dark" />
-    <!-- 移动端地址栏取色，与纸感底 / 深色底一致（令牌 --page 的两套值） -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2efe7" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131412" />
+    <!-- 移动端地址栏取色，与冷调底色一致（令牌 --page 的两套值：#f4f6fb / #070b14） -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f6fb" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070b14" />
     <title>AI 研究工作台 · 有出处的研究报告</title>
 
     <!--
-      字体：展示字 Fraunces（学术/期刊感）+ 正文 Public Sans + 数据 JetBrains Mono。
+      字体：正文/展示 Inter + Inter Tight（控制台观感的无衬线）+ 数据 JetBrains Mono。
+      ⚠️ 这里必须与 tokens.css 的 --font-display / --font-body / --font-mono 对齐：
+      漏改过一次的教训是 tokens 声明了 Inter 但外链还在拉 Fraunces/Public Sans，
+      结果 Inter 从未被加载、全站静默回退到系统字体，同时还白拉两个用不到
+      的字体（外链 CSS 阻塞首屏渲染）。
       preconnect 提前建连，display=swap 避免首屏白字闪动；
-      离线时自动回落到系统 serif / sans / mono，不影响可用性。
+      离线时自动回落到系统 sans / mono，不影响可用性。
     -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
   </head>
@@ -31,9 +35,9 @@
     <div id="root"></div>
     <!-- 未启用 JS 的极少数场景：给出可读说明，而不是一片空白 -->
     <noscript>
-      <div style="max-width: 520px; margin: 12vh auto; padding: 24px; font-family: system-ui, sans-serif; color: #1c1d19; background: #fbfaf6; border: 1px solid rgba(28,29,25,.12); border-radius: 14px;">
+      <div style="max-width: 520px; margin: 12vh auto; padding: 24px; font-family: system-ui, sans-serif; color: #0b1220; background: #ffffff; border: 1px solid rgba(11,18,32,.12); border-radius: 16px;">
         <h1 style="margin: 0 0 8px; font-size: 20px;">需要启用 JavaScript</h1>
-        <p style="margin: 0; line-height: 1.7; color: #5f6157;">
+        <p style="margin: 0; line-height: 1.7; color: #51607a;">
           AI 研究工作台是一个交互式单页应用，请在浏览器中启用 JavaScript 后重新打开本页。
         </p>
       </div>

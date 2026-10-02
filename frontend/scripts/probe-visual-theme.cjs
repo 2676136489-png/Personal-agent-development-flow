@@ -115,12 +115,39 @@ const PROBE = `(() => {
   /* loaded=false 表示这轮访问拿到的是浏览器错误页/空文档。
      此时所有派生断言（字体、令牌、渐变）都会假失败，先用这一项把原因说清楚。 */
   const loaded = !!(document.querySelector('#root') && document.querySelector('#root').childElementCount > 0)
+  /* 字体**是否真被加载**。只读 font-family 声明是不够的 ——
+     声明了 Inter 但 index.html 外链没拉 Inter 时，计算值照样显示 Inter，
+     实际渲染却回退到系统字体。这种「声明与加载不一致」只有查 FontFaceSet 才发现得了。
+
+     ⚠️ check(font) 不带字重时默认按 400 查。外链只请求了 500;600;700（标题只用
+     semibold/bold），用默认 400 去查会**误报未加载** —— 实测就踩过这个：
+     interTight=false 但 interTight@600 明明 loaded。
+     所以这里按真实用到的字重查，并顺带确认 h1 真的落在 Inter Tight 上。 */
+  const fonts = {
+    inter: document.fonts ? document.fonts.check('500 16px "Inter"') : null,
+    interTight: document.fonts ? document.fonts.check('600 16px "Inter Tight"') : null,
+    mono: document.fonts ? document.fonts.check('500 16px "JetBrains Mono"') : null,
+    /* 已加载的字重清单，便于确认外链请求的字重与实际用到的对得上 */
+    loaded: document.fonts
+      ? Array.from(new Set(
+          Array.from(document.fonts).filter((f) => f.status === 'loaded')
+            .map((f) => f.family + '@' + f.weight)
+        ))
+      : null,
+    /* 外链里是否还留着已退役的字体（Fraunces/Public Sans） */
+    retiredLinked: Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      .some((l) => /Fraunces|Public\+Sans/i.test(l.href))
+  }
+  const h1 = document.querySelector('h1')
+  const h1Font = h1 ? getComputedStyle(h1).fontFamily : null
   return {
     loaded,
     href: location.href.slice(0, 120),
     rootChildren: document.querySelector('#root') ? document.querySelector('#root').childElementCount : -1,
     theme: document.documentElement.getAttribute('data-theme') || '(未设置)',
     tokens,
+    fonts,
+    h1Font,
     bodyBg: body.backgroundColor,
     bodyFont: body.fontFamily.split(',')[0].replace(/"/g, ''),
     horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
@@ -188,7 +215,15 @@ async function main() {
         await cdp.send('Runtime.evaluate', {
           expression: `document.documentElement.setAttribute('data-theme','${theme}')`
         })
-        await sleep(700)
+        /* ⚠️ 必须等字体加载完再量。
+           document.fonts.check() 的语义是「该字体**已被下载**」，
+           而 Web Font 是按需加载的 —— 不等 fonts.ready 就会把
+           「还没下载完」误判成「没这个字体」，实测 Inter Tight 就被这样误报过。 */
+        await cdp.send('Runtime.evaluate', {
+          expression: `document.fonts.ready.then(() => new Promise(r => setTimeout(r, 300)))`,
+          awaitPromise: true
+        })
+        await sleep(500)
         const { result } = await cdp.send('Runtime.evaluate', { expression: PROBE, returnByValue: true })
         results.push({ route, ...result.value })
 
@@ -220,6 +255,22 @@ async function main() {
       expect(!r.horizontalOverflow, `${r.theme} 出现横向溢出 ${r.scrollW}>${r.innerW}`)
       expect(/Inter|system-ui|Noto Sans|PingFang|YaHei/.test(r.bodyFont),
         `${r.theme} 正文字体未换血（仍是 ${r.bodyFont}）`)
+
+      /* 字体必须真被加载，且外链里不能还挂着已退役的字体。
+         换字体只改 tokens 不改 index.html 外链 → 声明生效、实际回退系统字体，
+         这个坑就是靠这条断言拦住的。 */
+      if (r.fonts && r.fonts.inter !== null) {
+        expect(r.fonts.inter, `${r.theme} Inter 未被真正加载（声明了但外链没拉，实际回退系统字体）`)
+        expect(r.fonts.interTight, `${r.theme} Inter Tight 未被真正加载（按 600 字重查）`)
+        expect(r.fonts.mono, `${r.theme} JetBrains Mono 未被真正加载`)
+        expect(!r.fonts.retiredLinked,
+          `${r.theme} 外链里还挂着已退役的 Fraunces / Public Sans，白拉两个用不到的字体并阻塞首屏`)
+        /* 标题必须真的落在 Inter Tight 上 —— 令牌第一档被浏览器跳过时它会静默回退 Inter */
+        if (r.h1Font) {
+          expect(/Inter Tight/.test(r.h1Font) && r.fonts.interTight,
+            `${r.theme} h1 未真正使用 Inter Tight（font-family=${String(r.h1Font).slice(0, 40)}）`)
+        }
+      }
       /* 主色必须是蓝色系，不允许残留 v2 的朱红 rgb(192,57,43)/rgb(255,106,77)。
          注意 getPropertyValue 返回的是**声明值**（这里是 hex），不是 rgb()，
          所以按 hex 判定，别写 rgb 正则。 */
