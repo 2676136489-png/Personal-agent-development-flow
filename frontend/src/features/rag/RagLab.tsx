@@ -722,7 +722,10 @@ function ResultView({
                 : `${embedDetail.label} 只做字面匹配：「提升召回率」和「优化检索效果」在它看来毫无关系。`}
             </p>
             <div className="rag-vector-grid">
-              <VectorHeatmap detail={embedDetail} />
+              <div className="rag-figure__sub">
+                <h4>块 × 维度的取值</h4>
+                <VectorHeatmap detail={embedDetail} />
+              </div>
               <div className="rag-figure__sub">
                 <h4>块与问题在向量空间中的位置</h4>
                 <VectorScatter

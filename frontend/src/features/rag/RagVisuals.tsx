@@ -99,7 +99,7 @@ export function VectorHeatmap({ detail }: { detail: RagEmbedDetail }) {
           )),
         )}
       </div>
-      <p className="rag-figure__note">
+      <p className="rag-figure__note rag-heatmap__note">
         每行一个块，取前 {heatmap.cols} 维（共 {detail.dims} 维，绝对值上限 {heatmap.scale}）。
         蓝 = 正值，青 = 负值，越深越远离 0。
         {heatmap.total_chunks > heatmap.rows && ` 只画了前 ${heatmap.rows} 块。`}

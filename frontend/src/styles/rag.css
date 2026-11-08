@@ -853,6 +853,13 @@
   margin-top: var(--space-3);
 }
 
+/* 两栏各带一个小标题，左边「块 × 维度」右边「块 × 主成分」，起行才对齐 */
+.rag-vector-grid > .rag-figure__sub {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .rag-heatmap-wrap {
   min-width: 0;
 }
@@ -862,6 +869,10 @@
   gap: 2px;
   max-height: 240px;
   overflow: hidden;
+}
+
+.rag-heatmap__note {
+  margin-top: var(--space-2);
 }
 
 .rag-heatmap__cell {
