@@ -13,6 +13,7 @@ from app.api.routes.graph import router as graph_router
 from app.api.routes.health import router as health_router
 from app.api.routes.knowledge import router as knowledge_router
 from app.api.routes.llm import router as llm_router
+from app.api.routes.rag import router as rag_router
 from app.api.routes.research import router as research_router
 from app.api.routes.settings import router as settings_router
 
@@ -21,6 +22,7 @@ api_router.include_router(health_router)
 api_router.include_router(research_router)
 api_router.include_router(agent_router)
 api_router.include_router(knowledge_router)
+api_router.include_router(rag_router)
 api_router.include_router(graph_router)
 api_router.include_router(settings_router)
 api_router.include_router(llm_router)

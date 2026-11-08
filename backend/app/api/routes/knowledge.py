@@ -105,6 +105,41 @@ async def list_documents(
 
 
 @router.get(
+    "/status",
+    response_model=ApiResponse[dict],
+    summary="知识库状态：当前向量模型、文档/片段计数、待重建数量",
+)
+async def knowledge_status(
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> ApiResponse[dict]:
+    return success_response(service.status())
+
+
+@router.post(
+    "/documents/{document_id}/reindex",
+    response_model=ApiResponse[Document],
+    summary="用当前向量模型重算某份文档（重新切块 + 重新向量化）",
+)
+async def reindex_document(
+    document_id: str,
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> ApiResponse[Document]:
+    return success_response(await service.reindex_document(document_id))
+
+
+@router.post(
+    "/reindex",
+    response_model=ApiResponse[dict],
+    summary="把向量模型不一致的文档全部重算（force=true 则全部重算）",
+)
+async def reindex_all(
+    force: bool = False,
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> ApiResponse[dict]:
+    return success_response(await service.reindex_stale(force=force))
+
+
+@router.get(
     "/documents/{document_id}/chunks",
     response_model=ApiResponse[list[DocumentChunk]],
     summary="查看某文档被切成哪些块（带页码/字符位置）",

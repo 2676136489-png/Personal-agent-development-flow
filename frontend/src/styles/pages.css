@@ -637,3 +637,159 @@
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
+
+/* ===== 知识库：向量状态 / 文档行操作 / 片段查看 =====
+
+   这一块是「知识库真正看得见」的支撑样式：向量模型状态、每篇文档的
+   重建入口，以及展开后的真实切块。全部复用令牌，不引入新色值。 */
+
+.kb-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--ok-border);
+  border-radius: var(--radius-md);
+  background: var(--ok-bg);
+}
+
+.kb-status--warn {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+}
+
+.kb-status__main {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.kb-status__dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: var(--radius-circle);
+  background: var(--warn);
+}
+
+.kb-status__dot[data-ok='true'] {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-bg);
+}
+
+.kb-status__title {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.kb-status__model {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.kb-status__desc {
+  margin: 3px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.kb-status__action {
+  flex: 0 0 auto;
+}
+
+.doc--stack {
+  display: grid;
+  gap: var(--space-3);
+  align-items: stretch;
+}
+
+.doc__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.doc__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.doc__actions .button {
+  padding: 5px 10px;
+  font-size: 0.74rem;
+}
+
+.doc__error {
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.doc__chunks {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--line-strong);
+}
+
+.kb-chunk {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: var(--space-3);
+}
+
+.kb-chunk__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: 4px;
+}
+
+.kb-chunk__no {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-ink);
+}
+
+.kb-chunk__meta {
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  color: var(--faint);
+}
+
+.kb-chunk__text {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.65;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kb-crosslink {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: var(--space-4);
+}

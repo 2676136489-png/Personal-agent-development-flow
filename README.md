@@ -8,7 +8,7 @@
 
 ![概览页](docs/images/overview-light.jpg)
 
-9 个模块均可用（概览 / 深度研究 / 研究规划 / 智能体 / 知识库 / 研究报告 / 效果评估 / 系统设置 / 使用教程），后端 237 个测试通过。架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)，项目整体说明与关键设计取舍见 [`PROJECT.md`](PROJECT.md)。
+10 个模块均可用（概览 / 深度研究 / 研究规划 / 智能体 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程），后端 256 个测试通过。架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)，项目整体说明与关键设计取舍见 [`PROJECT.md`](PROJECT.md)。
 
 ---
 
@@ -50,6 +50,10 @@ END
 |---|---|
 | ![智能体](docs/images/agent-runner.jpg) | ![研究报告](docs/images/reports.jpg) |
 
+| RAG 流程 | 研究规划 |
+|---|---|
+| ![RAG 流程](docs/images/rag-lab.jpg) | ![研究规划](docs/images/research-planner.jpg) |
+
 界面是冷调深空蓝，浅色与深色两套主题，配色不靠肉眼定——每个前景/背景组合的对比度都先算再选值（浅底正文 ≥5.0:1，深底 ≥6.5:1）。主题色全部集中在 `styles/tokens.css`，业务 CSS 里只剩十来处渐变遮罩的技术性硬编码，换主题只改令牌。
 
 深色主题：
@@ -74,15 +78,15 @@ backend/app/
 │   └── sources.py          工具输出 → 可展示的依据来源
 ├── agent/                  智能体工作台：自主工具调用循环 + 运行历史
 ├── llm/                    统一模型调用层（多家 provider 可切换 + 自动兜底）
-├── rag/                    解析 → 切块 → 向量 → 检索 → 存储
+├── rag/                    解析 → 切块 → 向量 → 检索 → 存储（实验台在 lab.py）
 ├── search/                 搜索配额记账与额度决策
 ├── events/                 事件总线 + 落库（可回放）
 ├── observability/          指标与追踪
 ├── tools/                  search_web / fetch_webpage / calculate / search_knowledge_base
-└── tests/                  237 passed
+└── tests/                  256 passed
 
 frontend/src/
-├── features/               9 个页面：概览 / 深度研究 / 研究规划 / 智能体 / 知识库 / 研究报告 / 效果评估 / 系统设置 / 使用教程
+├── features/               10 个页面：概览 / 深度研究 / 研究规划 / 智能体 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程
 ├── components/             通用组件（步骤条、时间线、证据面板、Toast…）
 ├── api/                    唯一 HTTP 出口（SSE 与轮询共用同一条数据链路）
 └── styles/                 设计令牌 + 分层样式
@@ -156,10 +160,19 @@ npm run dev                       # 127.0.0.1:5173
 | POST | `/api/knowledge/documents` | 上传并摄入文档（PDF / Markdown / TXT） |
 | GET | `/api/knowledge/documents` · `/{id}/chunks` | 文档列表 / 查看切块 |
 | POST | `/api/knowledge/search` | 检索知识库 |
+| GET | `/api/knowledge/status` | 当前向量后端 / 维度 / 是否具备语义能力 / 待重建文档数 |
+| POST | `/api/knowledge/reindex?force=` | 按当前向量模型重建索引 |
 | GET | `/api/llm/provider` · `/api/llm/ping` | 当前生效的模型配置（**不含密钥**）/ 真打一次模型 |
 | POST | `/api/llm/stream` | 流式自测（逐块返回） |
 | GET | `/api/settings` · `/api/settings/run-budget` · `/api/settings/usage` | 配置 / 当日预算 / 用量 |
 | GET | `/api/health` | 存活探针（带指标快照） |
+
+**RAG 实验台**
+
+| 方法 | 路径 | 作用 |
+|---|---|---|
+| GET | `/api/rag/options` | 切块 / 检索 / 向量后端 / 参数元数据（前端控件的唯一数据源） |
+| POST | `/api/rag/pipeline` | 解析 → 切块 → 向量化 → 检索 → 组装，返回五阶段明细与耗时 |
 
 ```bash
 # 启动一次研究
@@ -183,13 +196,14 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 | 2 | 人工确认 | 填意见 → 批准 | 状态 `completed`，出现 Report（含 sections / limitations） |
 | 3 | 拒绝 | 点「拒绝并终止」 | 状态 `cancelled`，无报告 |
 | 4 | 循环 | 看 Pipeline | `Research ×N`（N ≤ max_iterations） |
-| 5 | 单元测试 | `.venv/Scripts/python -m pytest tests` | `237 passed` |
+| 5 | 单元测试 | `.venv/Scripts/python -m pytest tests` | `256 passed` |
 | 6 | 静态检查 | `.venv/Scripts/python -m ruff check app tests` | `All checks passed!` |
 | 7 | 前端类型 | `npm run typecheck` | 无输出 |
 | 8 | 布局与跳转 | `frontend/scripts/` 下的 CDP 探针脚本 | 元素几何 / 跳转落地状态符合断言 |
 | 9 | 视觉与可读性 | `node scripts/probe-visual-theme.cjs <地址> ""` | 双主题令牌 / 渐变 / 玻璃层 / 字体加载断言全绿 |
 | 10 | 细节点与对比度 | `node scripts/probe-visual-zoom.cjs <地址> dark` | hover 态对比度 ≥4.5:1、网格落到像素 |
-| 11 | 文档截图 | `node scripts/docs-screenshots.cjs <地址>` | `docs/images/` 下 7 张首屏图，页面已渲染完（非骨架屏） |
+| 11 | RAG 实验台 | `node scripts/probe-rag-page.cjs <地址>` | 五张图齐、色带段数=块卡片数、斜纹重叠>0、prompt 非空、无横向溢出 |
+| 12 | 文档截图 | `node scripts/docs-screenshots.cjs <地址>` | `docs/images/` 下 8 张首屏图，页面已渲染完（非骨架屏） |
 
 配色不靠肉眼定：`tokens.css` 里每个前景/背景组合的对比度都是脚本实测的
 （浅底正文 ≥5.0:1，深底 ≥6.5:1）。第 9/10 项针对的是「改了样式但没真生效」——

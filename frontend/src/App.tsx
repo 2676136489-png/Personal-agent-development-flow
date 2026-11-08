@@ -10,7 +10,7 @@ import { LoadingState } from './components/LoadingState'
  * 页面级按需加载。
  *
  * 为什么用 React.lazy 而不是路由库：项目红线明确「不引入 react-router」。
- * 而 SPA 只有 9 个静态页面，本来也不需要路由 —— 用状态切页 + lazy 就够了。
+ * 而 SPA 只有 10 个静态页面，本来也不需要路由 —— 用状态切页 + lazy 就够了。
  * 收益：首屏只下载「概览」相关的代码，报告/教程/设置等模块点开才加载。
  */
 const Dashboard = lazy(() =>
@@ -27,6 +27,9 @@ const AgentRunner = lazy(() =>
 )
 const KnowledgeBase = lazy(() =>
   import('./features/knowledge/KnowledgeBase').then((m) => ({ default: m.KnowledgeBase })),
+)
+const RagLab = lazy(() =>
+  import('./features/rag/RagLab').then((m) => ({ default: m.RagLab })),
 )
 const Tutorial = lazy(() =>
   import('./features/tutorial/Tutorial').then((m) => ({ default: m.Tutorial })),
@@ -58,16 +61,16 @@ function usePrefetchPrimaryPage() {
  * 顶栏导航 + 内容区。
  *
  * 响应式（纯 CSS 断点，除抽屉开合外无额外状态）：
- *  - ≥1200px：组标签可见，9 项平铺在 3 组内；
+ *  - ≥1200px：组标签可见，10 项平铺在 4 组内；
  *  - 1024–1199px：隐藏组标签，只留组间竖线；
- *  - 768–1023px：顶栏只留 NAV_CORE_KEYS 三项 +「更多」下拉（3 组标题 + 全部 9 项）；
- *  - <768px：汉堡按钮 + 移动抽屉（唯一的 navOpen state，9 项 + 3 组标题）。
+ *  - 768–1023px：顶栏只留 NAV_CORE_KEYS 三项 +「更多」下拉（4 组标题 + 全部 10 项）；
+ *  - <768px：汉堡按钮 + 移动抽屉（唯一的 navOpen state，10 项 + 4 组标题）。
  */
 
 /* ===================== 导航数据结构（S1 / §2.1） ===================== */
 
 export type PageKey =
-  | 'dashboard' | 'workflow' | 'research' | 'agent' | 'knowledge'
+  | 'dashboard' | 'workflow' | 'research' | 'agent' | 'knowledge' | 'rag'
   | 'reports' | 'evaluation' | 'settings' | 'tutorial'
 
 /** 视觉层级：家 / 主推 / 次（开发者向也用次） */
@@ -101,6 +104,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { key: 'research', label: '研究规划', tier: 'secondary' },
     { key: 'agent', label: '智能体', tier: 'secondary' },
     { key: 'knowledge', label: '知识库', tier: 'secondary' },
+    { key: 'rag', label: 'RAG 流程', tier: 'secondary', hint: '可视化' },
   ]},
   { id: 'results', label: '结果', items: [
     { key: 'reports', label: '研究报告', tier: 'secondary' },
@@ -150,7 +154,7 @@ function readStoredPage(): PageKey {
  * 从 URL hash（`#/workflow`）解析页面：让页面可刷新、可分享、可后退。
  *
  * 为什么用 hash 而不是引入路由库：项目红线是「不引入 react-router」，
- * 而 9 个静态页面只需要一个「当前页」标识 —— hash 零依赖，且天然兼容
+ * 而 10 个静态页面只需要一个「当前页」标识 —— hash 零依赖，且天然兼容
  * 后端的 SPA fallback（任何路径都回落 index.html）。非法值返回 null。
  */
 function readHashPage(): PageKey | null {
@@ -465,7 +469,8 @@ export default function App() {
                 {page === 'workflow' && <ResearchWorkflow focusThread={focusThread} />}
                 {page === 'research' && <ResearchPlanner onNavigate={navigate} />}
                 {page === 'agent' && <AgentRunner />}
-                {page === 'knowledge' && <KnowledgeBase />}
+                {page === 'knowledge' && <KnowledgeBase onNavigate={navigate} />}
+                {page === 'rag' && <RagLab />}
                 {page === 'tutorial' && <Tutorial onNavigate={navigate} />}
                 {page === 'reports' && (
                   <Reports

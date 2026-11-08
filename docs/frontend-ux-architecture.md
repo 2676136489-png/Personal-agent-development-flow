@@ -1617,7 +1617,7 @@ graph TD
 | **Q3** | 「效果评估 / 系统设置」是否隐藏？ | **不隐藏，降级**。次级样式 = `.nav-link--dev`（`--faint` 字 + 400 字重）；**不进入**概览入口卡；命令面板与抽屉仍可达。**前置条件**：`--faint` 必须先修订（否则 `--faint` 字在浅色 3.33:1 不达标） | §4.1 `--faint` 行 + `NavLinkButton` |
 | **Q4** | 是否做「上手进度」三步引导？ | **做轻量版**：`localStorage['arw-onboarded']` 标记 + 概览 hero 下方一行进度 + 首次空态文案增强 + 中断点首次解释。**不做全屏向导** | T07（`Dashboard.tsx:74-88`） |
 | **Q5** | 是否引入 toast？ | **已批准**：模块级单例，`toast.success/error/info`，零 prop drilling、不新增依赖、不改 App 元素结构 | §3.1 |
-| **Q6** | ⌘K 是「搜索」还是「命令」？ | **混合**。输入时同时匹配 9 个页面（按 `NAV_GROUPS` 分组显示）与 5 条命令（`开始研究 / 上传资料 / 切换主题 / 系统设置 / 帮助`）；无结果时列出 3 组全部条目（等价于全功能菜单）。实现：`cmdOpen` state + 复用 `.modal-backdrop/.modal` | T06 |
+| **Q6** | ⌘K 是「搜索」还是「命令」？ | **混合**。输入时同时匹配 10 个页面（按 `NAV_GROUPS` 分组显示）与 5 条命令（`开始研究 / 上传资料 / 切换主题 / 系统设置 / 帮助`）；无结果时列出 3 组全部条目（等价于全功能菜单）。实现：`cmdOpen` state + 复用 `.modal-backdrop/.modal` | T06 |
 | **Q7** | ETA 数据来源？ | **已批准**：`localStorage['arw-run-durations']` 最近 3 次总耗时中位数 + 本次已完成阶段耗时；**单调不回落**；首次运行不显示倒计时，显示「首次运行，一般 2–4 分钟」 | §3.4 |
 | **Q8** | 后端本轮的「搜索用量」配额字段？ | **明确不依赖**，本轮不预留占位 UI。字段名已由 team-lead 给出（后端 `SearchQuotaSnapshot`，`GET /api/settings/usage`），**照抄不自行命名**。`buildGroups()`（`Settings.tsx:31-89`）只新增一个 item | T05/T07 |
 | | 可用字段（**全部照抄，不得改名**） | `provider` / `period_key` / `period_start` / `period_end` / `renews_at` / `credits_limit` / `credits_used` / `credits_remaining` / `ratio` / `warn_level` / `calls_total` / `search_depth_default` / `estimated_runs_remaining: number \| null` / `daily: {date, calls, credits}[]` | `api/settings.ts` + `Settings.tsx` |

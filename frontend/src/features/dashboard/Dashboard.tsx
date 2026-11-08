@@ -36,6 +36,7 @@ const ENTRY_CARDS: {
 
 const ENTRY_LINKS: { key: string; label: string }[] = [
   { key: 'research', label: '研究规划' },
+  { key: 'rag', label: 'RAG 流程' },
   { key: 'evaluation', label: '效果评估' },
   { key: 'settings', label: '系统设置' },
   { key: 'tutorial', label: '教程' },

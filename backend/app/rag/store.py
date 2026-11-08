@@ -230,6 +230,15 @@ class KnowledgeStore:
         ).fetchone()
         return self._row_to_document(row) if row else None
 
+    def delete_chunks(self, document_id: str) -> int:
+        """清空一份文档的 chunk（重建向量前调用）。返回删除条数。"""
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM document_chunks WHERE document_id = ?", (document_id,)
+            )
+            self._conn.commit()
+        return cursor.rowcount
+
     def delete_document(self, document_id: str) -> bool:
         """删除一份文档及其全部 chunk（向量索引会在下次检索时按版本号重建）。"""
         with self._lock:
@@ -269,6 +278,9 @@ class KnowledgeStore:
             (embedding_model,),
         ).fetchall()
         return [(row["id"], json.loads(row["embedding"])) for row in rows]
+
+    def count_chunks(self) -> int:
+        return int(self._conn.execute("SELECT COUNT(*) FROM document_chunks").fetchone()[0])
 
     # ---------- mapping ----------
 

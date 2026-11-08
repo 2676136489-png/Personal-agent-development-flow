@@ -23,6 +23,8 @@ const BASE = (process.argv[2] || 'http://127.0.0.1:4178').replace(/\/$/, '')
 const REPO = path.resolve(__dirname, '../..')
 const OUT_ARG = process.argv[3] || 'docs/images'
 const OUT = path.isAbsolute(OUT_ARG) ? OUT_ARG : path.resolve(REPO, OUT_ARG)
+/* 只重截某几张：新增页面时没必要把 7 张旧图也重跑一遍，diff 会全是二进制噪声 */
+const ONLY = process.argv[4] || ''
 
 /* 兜底：仍然越界就直接报错。截图散落在仓库外会被 git 漏掉，
    等于白跑一趟，还容易把旧图当新图发到文档里。 */
@@ -69,13 +71,29 @@ function connect(wsUrl) {
 }
 
 /* 要截的页面。route 为空表示首页；theme 决定明暗。
-   路由名见 App.tsx 的 NAV_GROUPS：workflow=深度研究、research=研究规划。 */
+   路由名见 App.tsx 的 NAV_GROUPS：workflow=深度研究、research=研究规划。
+   prepare 是截图前要先跑的一段脚本（如 RAG 页要先真跑一次链路），
+   waitFor 是等它出现的选择器，scrollY 返回要滚到的位置 —— 首屏缺省为 0。 */
 const SHOTS = [
   { file: 'overview-light.jpg', route: '', theme: 'light', wait: 3200 },
   { file: 'overview-dark.jpg', route: '', theme: 'dark', wait: 3200 },
   { file: 'research-workflow.jpg', route: 'workflow', theme: 'light', wait: 3600 },
   { file: 'research-planner.jpg', route: 'research', theme: 'light', wait: 3000 },
   { file: 'knowledge-base.jpg', route: 'knowledge', theme: 'light', wait: 3000 },
+  {
+    file: 'rag-lab.jpg',
+    route: 'rag',
+    theme: 'light',
+    wait: 2000,
+    prepare: "document.querySelector('.rag-run__btn')?.click()",
+    waitFor: '.rag-report',
+    settle: 1200,
+    /* 停到「切块」那张图：色带 + 块卡片是这一页最有辨识度的部分 */
+    scrollY: `(() => {
+      const fig = document.querySelectorAll('.rag-figure')[1]
+      return fig ? fig.getBoundingClientRect().top + window.scrollY - 92 : 0
+    })()`
+  },
   { file: 'agent-runner.jpg', route: 'agent', theme: 'dark', wait: 3000 },
   { file: 'reports.jpg', route: 'reports', theme: 'light', wait: 3000 }
 ]
@@ -98,7 +116,7 @@ async function main() {
     await cdp.send('Page.enable')
     await cdp.send('Runtime.enable')
 
-    for (const shot of SHOTS) {
+    for (const shot of ONLY ? SHOTS.filter((s) => s.file.includes(ONLY)) : SHOTS) {
       await cdp.send('Emulation.setDeviceMetricsOverride', {
         width: 1440, height: 900, deviceScaleFactor: 1, mobile: false
       })
@@ -131,6 +149,29 @@ async function main() {
         awaitPromise: true
       })
       await sleep(shot.wait)
+
+      /* 需要先「用起来」的页面：跑一次真实链路，等结果渲染完再截 */
+      if (shot.prepare) {
+        await cdp.send('Runtime.evaluate', { expression: shot.prepare, awaitPromise: true })
+        for (let i = 0; i < 120; i++) {
+          await sleep(500)
+          const { result } = await cdp.send('Runtime.evaluate', {
+            expression: `!!document.querySelector('${shot.waitFor}')`,
+            returnByValue: true
+          })
+          if (result.value) break
+          if (i === 119) console.warn(`⚠️ ${shot.file} 等 ${shot.waitFor} 超时`)
+        }
+        await sleep(shot.settle || 600)
+      }
+      if (shot.scrollY) {
+        const { result } = await cdp.send('Runtime.evaluate', {
+          expression: `window.scrollTo({ top: ${shot.scrollY}, behavior: 'instant' })`,
+          returnByValue: true
+        })
+        void result
+        await sleep(500)
+      }
 
       /* 视口截图，不captureBeyondViewport —— 这是体积控制的关键。
          用 JPEG q82：界面截图是连续色块，PNG 无损压缩对它效果差

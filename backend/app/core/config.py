@@ -219,8 +219,18 @@ class Settings(BaseSettings):
     # 切块参数：size 太小会丢上下文，太大则检索不精准；overlap 用于避免句子被切断
     chunk_size: int = 800
     chunk_overlap: int = 120
+    # 默认切块策略（ingest 用）：recursive | fixed | sentence | markdown | semantic
+    # recursive 是 LangChain RecursiveCharacterTextSplitter 的做法，先按段落、再按句子、
+    # 最后才硬切，实际效果比纯固定窗口稳定，所以作为默认值。
+    chunk_strategy: str = "recursive"
+    # 小于该长度的碎片并入相邻块（纯标点 / 孤立标题这类块没有检索价值）
+    chunk_min_size: int = 60
     # 一次检索返回几条
     retrieval_top_k: int = 5
+    # RAG 实验台的规模上限：演示用，不需要把整本书跑完
+    # （块数直接决定绘图点数与 embedding 费用）
+    rag_lab_max_chunks: int = 120
+    rag_lab_max_chars: int = 60_000
     # 上传文件大小上限（字节）。必须限制，否则一个 2GB 文件就能打满内存。
     upload_max_bytes: int = 10 * 1024 * 1024
 
@@ -233,6 +243,15 @@ class Settings(BaseSettings):
     # 本地哈希向量的维度（真实模型时不生效，以模型返回为准）
     embedding_dimension: int = 256
     embedding_timeout_seconds: float = 30.0
+    # 复用 LLM 的 OpenAI 兼容端点与 Key 做 embedding。
+    #
+    # 为什么默认开：LLM 已经配好 Key 和 base_url，而向量模型通常就在同一个端点上
+    # （智谱 LLM 与 embedding-3 同源、OpenAI 同源）。不开启的话就得再维护第二份
+    # Key —— 实际结果往往是「忘配 → 悄悄退回哈希向量 → 检索全是字面匹配」。
+    embedding_reuse_llm_credentials: bool = True
+    # 单次 embedding 请求最多几条文本。各家上限不同（OpenAI 2048、智谱 64），
+    # 16 是既不会触发上限、又能把请求数压下来的保守值。
+    embedding_batch_size: int = 16
     # [B38] 深度研究是否要求知识库检索具备**语义**能力才肯采用。
     #
     # 默认 True。哈希兜底向量只有字面匹配、分数分布重叠（0.47 的无关内容
@@ -295,7 +314,8 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = False
     rate_limit_requests_per_minute: int = 30
     # 逗号分隔的路径前缀；只对这些前缀限流（静态资源与 /api/health 不限）。
-    rate_limit_paths: str = "/api/llm,/api/research,/api/graph,/api/agent"
+    # /api/rag 也要算进来：一次流水线会调用几十次 embedding（花钱的端点）。
+    rate_limit_paths: str = "/api/llm,/api/research,/api/graph,/api/agent,/api/rag"
 
     # ----- 生产加固：每日运行预算（防额度滥用）-----
     # 和限流的互补关系：限流拦「短时间高频」，预算拦「不紧不慢刷一整天」

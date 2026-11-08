@@ -186,12 +186,28 @@ def _mount_frontend(app: FastAPI) -> bool:
     return True
 
 
+async def _bootstrap_knowledge() -> None:
+    """启动后台任务：补预置文档 → 把向量模型不一致的旧文档重算。
+
+    为什么必须重算：换 embedding 后端（例如从哈希兜底换成真模型）之后，
+    旧向量的维度与语义空间都对不上，检索会直接漏掉它们。用户看到的现象是
+    「文档明明在库里，却一条都搜不到」——所以启动时对齐一次。
+    """
+    from app.rag.service import get_knowledge_service, seed_knowledge_base_if_empty  # noqa: PLC0415
+
+    await seed_knowledge_base_if_empty()
+    try:
+        result = await get_knowledge_service().reindex_stale()
+        if result["total"]:
+            logging.getLogger(__name__).info("知识库向量已对齐：%s", result)
+    except Exception:  # noqa: BLE001 - 后台对账失败不能拖垮服务
+        logging.getLogger(__name__).warning("知识库向量对账失败", exc_info=True)
+
+
 @asynccontextmanager
 async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
-    # 启动：知识库为空时后台导入预置示例文档（不阻塞服务就绪）
-    from app.rag.service import seed_knowledge_base_if_empty  # noqa: PLC0415
-
-    seed_task = asyncio.create_task(seed_knowledge_base_if_empty())
+    # 启动：知识库补齐 + 向量模型对账（不阻塞服务就绪）
+    seed_task = asyncio.create_task(_bootstrap_knowledge())
     yield
     # 关闭：先等 seed 与后台图任务收尾，再释放 SQLite 连接
     from app.graph.service import _drain_background_tasks  # noqa: PLC0415  # 避免循环 import

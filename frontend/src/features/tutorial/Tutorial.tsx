@@ -2,7 +2,7 @@ import { Reveal } from '../../components/Reveal'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionNav } from '../../components/SectionNav'
 import { Stagger, StaggerItem } from '../../components/Stagger'
-import { BotIcon, BookIcon, ClipboardIcon, FlaskIcon, GraduationIcon, HomeIcon } from '../../components/icons'
+import { BeakerIcon, BotIcon, BookIcon, ClipboardIcon, FlaskIcon, GraduationIcon, HomeIcon } from '../../components/icons'
 import type { IconProps } from '../../components/icons'
 import type { ComponentType } from 'react'
 
@@ -45,6 +45,14 @@ const MODULES: Module[] = [
     role: '上传 PDF / Markdown / TXT，自动解析、切块、向量化，供研究时检索引用。',
     scenario: '研究需要引用你的私有 / 内部资料，而非仅公开网络内容。',
     interaction: '上传文档 → 等待「就绪」→ 用「检索测试」输入问题，验证可被命中引用。',
+  },
+  {
+    icon: BeakerIcon,
+    name: 'RAG 流程',
+    role: '把检索链路拆成解析、切块、向量化、检索、组装五步，每一步的中间结果都摊开给人看。',
+    scenario: '想弄明白「这个问题为什么召回不到」，或对比不同切法、不同检索方法的效果。',
+    interaction:
+      '选语料 → 写问题 → 依次选切块 / 向量 / 检索方法 → 开始 RAG → 对照五张图看块边界、向量分布与两路排名。',
   },
   {
     icon: FlaskIcon,
@@ -135,7 +143,7 @@ export function Tutorial({ onNavigate }: { onNavigate?: NavigateFn }) {
               <p className="eyebrow">功能模块</p>
               <h2>每个模块解决什么问题？</h2>
               <p className="section-lede">
-                平台由「概览 / 研究规划 / 智能体 / 知识库 / 深度研究」五个模块组成，各司其职、可单独使用，也可串成完整研究链路。
+                平台由「概览 / 研究规划 / 智能体 / 知识库 / RAG 流程 / 深度研究 / 研究报告 / 效果评估 / 系统设置」组成，各司其职、可单独使用，也可串成完整研究链路。
               </p>
             </Reveal>
 
