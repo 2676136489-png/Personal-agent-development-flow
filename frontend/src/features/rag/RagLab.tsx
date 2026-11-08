@@ -724,16 +724,18 @@ function ResultView({
             <div className="rag-vector-grid">
               <VectorHeatmap detail={embedDetail} />
               <div className="rag-figure__sub">
-                <h4>块与问题在二维平面上的位置</h4>
+                <h4>块与问题在向量空间中的位置</h4>
                 <VectorScatter
                   points={embedDetail.projection}
                   queryPoint={embedDetail.query_point}
                   selectedIndexes={selectedIndexes}
                   focus={focusChunk}
                   onFocus={onFocus}
+                  explained={embedDetail.explained}
                 />
                 <p className="rag-figure__note">
-                  主成分分析把 {embedDetail.dims} 维压到 2 维。亮圈是问题向量，实心大点是进入上下文的块。
+                  主成分分析从 {embedDetail.dims} 维里取方差最大的三个方向，撑起这个立方体；拖住图形可以转，
+                  转一下就能看清二维投影里叠在一起的块其实一前一后。亮圈是问题向量，实心大点是进入上下文的块。
                 </p>
               </div>
             </div>

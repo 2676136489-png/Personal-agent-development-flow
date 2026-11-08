@@ -176,7 +176,7 @@ async def run_pipeline(
     dims = int(matrix.shape[1])
 
     query_vector = (await provider.embed([query]))[0]
-    projection, query_point = _project(vectors, query_vector)
+    projection, query_point, explained = _project(vectors, query_vector)
 
     embed_payload = {
         "spec_id": provider.spec.id,
@@ -195,6 +195,7 @@ async def run_pipeline(
         "heatmap": _heatmap(matrix),
         "projection": projection,
         "query_point": query_point,
+        "explained": explained,
         "query_preview": [round(float(v), 4) for v in query_vector[:HEATMAP_DIMS]],
     }
     stages.append(
@@ -357,40 +358,68 @@ def _heatmap(matrix: np.ndarray) -> dict:
 def _project(
     vectors: list[list[float]],
     query_vector: list[float],
-) -> tuple[list[dict], dict | None]:
-    """PCA 降维到 2D：让人能看见「问题落在向量空间的哪一片」。
+) -> tuple[list[dict], dict | None, list[float]]:
+    """PCA 降维到三维：让人能看见「问题落在向量空间的哪一片」。
 
     用 SVD 而不是随机投影 —— 样本就是这几十个块，SVD 的代价可以忽略，
-    而且前两个主成分的顺序稳定，同一个语料每次画出来的位置一致。
+    而且前三个主成分的顺序稳定，同一个语料每次画出来的位置一致。
+    取第三维不是为了好看：二维投影里两块叠在一起时，拉开第三个方向才分得清前后。
+
+    同时返回三个轴各自解释的方差占比 —— 合计通常远小于 1，这个数字本身就是信息：
+    它说明 2048 维里有大量长尾，摊在三个方向上的只是一部分。
     """
     matrix = np.asarray(vectors, dtype=np.float32)
     if matrix.ndim != 2 or matrix.shape[0] == 0:
-        return [], None
+        return [], None, []
 
     mean = matrix.mean(axis=0)
     centered = matrix - mean
     try:
         left, singular, right = np.linalg.svd(centered, full_matrices=False)
     except np.linalg.LinAlgError:  # pragma: no cover - 数值极端情况
-        return [{"x": 0.0, "y": 0.0, "index": i} for i in range(matrix.shape[0])], None
+        return (
+            [{"x": 0.0, "y": 0.0, "z": 0.0, "index": i} for i in range(matrix.shape[0])],
+            None,
+            [],
+        )
 
-    coords = left[:, :2] * singular[:2]
-    if coords.shape[1] < 2:  # 只有一个块时没有第二个主成分
-        coords = np.pad(coords, ((0, 0), (0, 2 - coords.shape[1])))
+    coords = left[:, :3] * singular[:3]
+    if coords.shape[1] < 3:  # 块数不足三个时没有第三主成分
+        coords = np.pad(coords, ((0, 0), (0, 3 - coords.shape[1])))
 
     points = [
-        {"x": round(float(coords[i, 0]), 4), "y": round(float(coords[i, 1]), 4), "index": i}
+        {
+            "x": round(float(coords[i, 0]), 4),
+            "y": round(float(coords[i, 1]), 4),
+            "z": round(float(coords[i, 2]), 4),
+            "index": i,
+        }
         for i in range(coords.shape[0])
     ]
 
     query_point = None
     if right.shape[0] >= 1:
-        components = right[:2]
+        components = right[:3]
         projected = (np.asarray(query_vector, dtype=np.float32) - mean) @ components.T
-        if len(projected) < 2:
-            projected = np.pad(projected, (0, 2 - len(projected)))
-        query_point = {"x": round(float(projected[0]), 4), "y": round(float(projected[1]), 4)}
-    return points, query_point
+        if len(projected) < 3:
+            projected = np.pad(projected, (0, 3 - len(projected)))
+        query_point = {
+            "x": round(float(projected[0]), 4),
+            "y": round(float(projected[1]), 4),
+            "z": round(float(projected[2]), 4),
+        }
+    return points, query_point, _explained(singular)
+
+
+def _explained(singular: np.ndarray) -> list[float]:
+    """前三个主成分各解释了多少方差（占比），不足三维补 0。"""
+    power = np.square(singular.astype(np.float64))
+    total = float(power.sum())
+    if total <= 0:  # 所有块向量完全相同，没有可解释的方差
+        return [0.0, 0.0, 0.0]
+    ratios = [float(value) for value in (power[:3] / total)]
+    ratios += [0.0] * (3 - len(ratios))
+    return [round(value, 4) for value in ratios]
 
 
 PROMPT_HEADER = (

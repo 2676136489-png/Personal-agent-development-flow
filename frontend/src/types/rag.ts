@@ -85,6 +85,7 @@ export interface RagHit {
 export interface RagPoint {
   x: number
   y: number
+  z: number
   index: number
 }
 
@@ -124,7 +125,9 @@ export interface RagEmbedDetail {
   }
   heatmap: { rows: number; cols: number; values: number[][]; scale: number; total_chunks: number }
   projection: RagPoint[]
-  query_point: { x: number; y: number } | null
+  query_point: { x: number; y: number; z: number } | null
+  /** 前三个主成分各解释的方差占比，合计通常远小于 1。 */
+  explained?: number[]
   query_preview: number[]
 }
 

@@ -88,6 +88,9 @@ const METRICS = `(() => {
     chunkCards: all('.rag-chunk').length,
     heatCells: all('.rag-heatmap__cell').length,
     scatterDots: all('.rag-scatter__dot').length,
+    scatterEdges: all('.rag-scatter__edge').length,
+    scatterAxes: all('.rag-scatter__axis').length,
+    scatterPc: all('.rag-scatter__pc li').length,
     hitRows: all('.rag-hit').length,
     selectedHits: all('.rag-hit[data-selected="true"]').length,
     statItems: all('.rag-stats__item').length,
@@ -348,6 +351,74 @@ async function main() {
     await sleep(700)
     report.steps.push({ name: 'recursive-run', ...(await evaluate(cdp, METRICS)) })
 
+    /* ---------- 2c. 三维向量视图：拖一下要转，复位要回到原位 ---------- */
+    await evaluate(cdp, "document.querySelector('.rag-scatter')?.scrollIntoView({ block: 'center' })")
+    await sleep(350)
+    // 逐点取屏幕坐标（按块编号配对）：旋转后每个点都该挪位置，复位后该分毫不差地回来
+    const readScatter = () =>
+      evaluate(
+        cdp,
+        `(() => {
+          const svg = document.querySelector('.rag-scatter')
+          if (!svg) return null
+          const box = svg.getBoundingClientRect()
+          return {
+            center: { x: box.left + box.width / 2, y: box.top + box.height / 2 },
+            dots: Array.from(svg.querySelectorAll('.rag-scatter__dot')).map((dot) => [
+              dot.querySelector('title').textContent,
+              Math.round(Number(dot.getAttribute('cx')) * 10) / 10,
+              Math.round(Number(dot.getAttribute('cy')) * 10) / 10,
+            ]),
+          }
+        })()`,
+      )
+    const beforeDrag = await readScatter()
+    if (beforeDrag?.center) {
+      const { x, y } = beforeDrag.center
+      await cdp.send('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        buttons: 1,
+        x,
+        y,
+        button: 'left',
+        clickCount: 1,
+      })
+      for (let i = 1; i <= 6; i += 1) {
+        await cdp.send('Input.dispatchMouseEvent', {
+          type: 'mouseMoved',
+          buttons: 1,
+          x: x + i * 16,
+          y: y - i * 6,
+          button: 'left',
+        })
+        await sleep(40)
+      }
+      await cdp.send('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        x: x + 96,
+        y: y - 36,
+        button: 'left',
+      })
+      await sleep(350)
+    }
+    const afterDrag = await readScatter()
+    await evaluate(cdp, "document.querySelector('.rag-scatter__reset')?.click()")
+    await sleep(350)
+    const afterReset = await readScatter()
+    const displaced = (from, to, limit) => {
+      const lookup = new Map((to?.dots ?? []).map((dot) => [dot[0], dot]))
+      return (from?.dots ?? []).filter((dot) => {
+        const next = lookup.get(dot[0])
+        if (!next) return false
+        return Math.abs(dot[1] - next[1]) > limit || Math.abs(dot[2] - next[2]) > limit
+      }).length
+    }
+    report.scatterSpin = {
+      total: beforeDrag?.dots.length ?? 0,
+      moved: displaced(beforeDrag, afterDrag, 2),
+      resting: (beforeDrag?.dots.length ?? 0) - displaced(beforeDrag, afterReset, 0.6),
+    }
+
     const lightShot = await cdp.send('Page.captureScreenshot', {
       format: 'png',
       captureBeyondViewport: true,
@@ -422,6 +493,17 @@ async function main() {
     expect(after?.chunkCards === after?.segments, '色带段数与块卡片数不一致')
     expect(after?.heatCells > 0, '向量热力图没有单元格')
     expect(after?.scatterDots > 0, '向量散点图没有点')
+    expect(after?.scatterEdges >= 12, `三维空间的框线不足 12 条棱：${after?.scatterEdges}`)
+    expect(after?.scatterAxes === 3, `三维主轴应为 3 条，实际 ${after?.scatterAxes}`)
+    expect(after?.scatterPc === 3, `三个主成分的方差读表应为 3 项，实际 ${after?.scatterPc}`)
+    expect(
+      report.scatterSpin.moved >= report.scatterSpin.total - 1,
+      `拖动后大部分散点没有换位置：${report.scatterSpin.moved}/${report.scatterSpin.total}`,
+    )
+    expect(
+      report.scatterSpin.resting === report.scatterSpin.total,
+      `复位没把视角还原：${report.scatterSpin.resting}/${report.scatterSpin.total}`,
+    )
     expect(after?.hitRows > 0, '检索结果没有候选行')
     expect(after?.selectedHits > 0, '没有「进入上下文」的命中行')
     expect(after?.promptChars > 100, '最终 prompt 是空的')

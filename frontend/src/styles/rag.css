@@ -870,36 +870,70 @@
   min-height: 5px;
 }
 
+.rag-scatter-wrap {
+  min-width: 0;
+}
+
 .rag-scatter {
   width: 100%;
   height: auto;
   display: block;
-  background: var(--surface-alt);
+  /* 中心一点极光，让立方体「浮」在面上，不是贴在纸上 */
+  background:
+    radial-gradient(115% 92% at 50% 34%, var(--accent-tint), transparent 66%),
+    var(--surface-alt);
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
+  cursor: grab;
+  touch-action: none;
+  outline: none;
 }
 
-.rag-scatter__grid {
+.rag-scatter:focus-visible {
+  border-color: var(--accent-border);
+  box-shadow: var(--focus-ring);
+}
+
+.rag-scatter[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+.rag-scatter__edge {
   stroke: var(--line-strong);
-  stroke-dasharray: 3 5;
   stroke-width: 1;
+}
+
+.rag-scatter__axis {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+
+.rag-scatter__axis-label {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+  fill: var(--faint);
 }
 
 .rag-scatter__dot {
   fill: var(--muted);
-  opacity: 0.6;
-  transition: opacity var(--dur-fast) var(--ease), r var(--dur-fast) var(--ease);
+  transition: fill var(--dur-fast) var(--ease);
   cursor: pointer;
-}
-
-.rag-scatter__dot:hover,
-.rag-scatter__dot[data-focus='true'] {
-  opacity: 1;
 }
 
 .rag-scatter__dot--hit {
   fill: var(--accent);
-  opacity: 0.95;
+}
+
+.rag-scatter__dot--active {
+  fill: var(--accent-ink);
+}
+
+.rag-scatter__halo {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.2;
 }
 
 .rag-scatter__query-ring {
@@ -924,10 +958,74 @@
   font-weight: 700;
 }
 
-.rag-scatter__axis {
+/* ---- 主成分读表 + 旋转提示 ---- */
+
+.rag-scatter__readout {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.rag-scatter__pc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rag-scatter__pc li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--mono);
-  font-size: 9px;
-  fill: var(--faint);
+  font-size: 0.68rem;
+  color: var(--faint);
+}
+
+.rag-scatter__pc-track {
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.rag-scatter__pc-track i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.rag-scatter__pc b {
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.rag-scatter__hint {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--faint);
+}
+
+.rag-scatter__reset {
+  padding: 2px 8px;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.rag-scatter__reset:hover {
+  color: var(--accent-ink);
+  border-color: var(--accent-border);
 }
 
 /* ---- 检索排序 ---- */
