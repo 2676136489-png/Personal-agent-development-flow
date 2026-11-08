@@ -10,7 +10,7 @@ import { LoadingState } from './components/LoadingState'
  * 页面级按需加载。
  *
  * 为什么用 React.lazy 而不是路由库：项目红线明确「不引入 react-router」。
- * 而 SPA 只有 10 个静态页面，本来也不需要路由 —— 用状态切页 + lazy 就够了。
+ * 而 SPA 只有 8 个静态页面，本来也不需要路由 —— 用状态切页 + lazy 就够了。
  * 收益：首屏只下载「概览」相关的代码，报告/教程/设置等模块点开才加载。
  */
 const Dashboard = lazy(() =>
@@ -146,7 +146,7 @@ function readStoredPage(): PageKey {
  * 从 URL hash（`#/workflow`）解析页面：让页面可刷新、可分享、可后退。
  *
  * 为什么用 hash 而不是引入路由库：项目红线是「不引入 react-router」，
- * 而 10 个静态页面只需要一个「当前页」标识 —— hash 零依赖，且天然兼容
+ * 而 8 个静态页面只需要一个「当前页」标识 —— hash 零依赖，且天然兼容
  * 后端的 SPA fallback（任何路径都回落 index.html）。非法值返回 null。
  */
 function readHashPage(): PageKey | null {
