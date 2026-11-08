@@ -131,6 +131,35 @@ export interface RagEmbedDetail {
   query_preview: number[]
 }
 
+export interface RagIndexTerm {
+  term: string
+  df: number
+  docs: number[]
+}
+
+export interface RagIndexFile {
+  name: string
+  role: string
+  bytes: number
+}
+
+export interface RagIndexDetail {
+  kind: string
+  count: number
+  dims: number
+  terms: number
+  postings: number
+  avg_tokens: number
+  vector_bytes: number
+  term_bytes: number
+  total_bytes: number
+  build_ms: number
+  store_ms: number
+  sample: RagIndexTerm[]
+  files: RagIndexFile[]
+  kept: number
+}
+
 export interface RagRetrieveDetail {
   method: string
   selected: RagHit[]
@@ -138,32 +167,16 @@ export interface RagRetrieveDetail {
   meta: Record<string, number | string | number[]>
 }
 
-export interface RagPromptDetail {
-  text: string
-  chars: number
-  tokens: number
-  context_chars: number
-  entries: {
-    n: number
-    index: number
-    score: number
-    page: number | null
-    heading: string | null
-    chars: number
-    tokens: number
-  }[]
-}
-
 export type RagStageDetail = Partial<
   RagParseDetail &
     RagChunkDetail &
     RagEmbedDetail &
-    RagRetrieveDetail &
-    RagPromptDetail
+    RagIndexDetail &
+    RagRetrieveDetail
 >
 
 export interface RagStage {
-  key: 'parse' | 'chunk' | 'embed' | 'retrieve' | 'assemble' | string
+  key: 'parse' | 'chunk' | 'embed' | 'index' | 'retrieve' | string
   label: string
   ms: number
   summary: string

@@ -267,8 +267,8 @@ def test_pipeline_returns_every_stage():
         "parse",
         "chunk",
         "embed",
+        "index",
         "retrieve",
-        "assemble",
     ]
     chunk_stage = next(stage for stage in data["stages"] if stage["key"] == "chunk")
     assert chunk_stage["detail"]["chunks"], "切块结果不能为空"
@@ -276,8 +276,14 @@ def test_pipeline_returns_every_stage():
     embed_stage = next(stage for stage in data["stages"] if stage["key"] == "embed")
     assert embed_stage["detail"]["dims"] > 0
     assert embed_stage["detail"]["heatmap"]["rows"] > 0
-    prompt_stage = next(stage for stage in data["stages"] if stage["key"] == "assemble")
-    assert "【资料】" in prompt_stage["detail"]["text"]
+    index_stage = next(stage for stage in data["stages"] if stage["key"] == "index")
+    index_detail = index_stage["detail"]
+    assert index_detail["count"] == len(chunk_stage["detail"]["chunks"])
+    assert index_detail["terms"] > 0 and index_detail["postings"] >= index_detail["terms"]
+    assert index_detail["sample"] and index_detail["sample"][0]["docs"], "倒排表样例不能为空"
+    assert index_detail["total_bytes"] > 0
+    # 流水线到检索为止：不再拼 prompt，也就不该有 assemble 这一步
+    assert "assemble" not in {stage["key"] for stage in data["stages"]}
     # 离线档位必须给出「没有语义能力」的提示，而不是假装正常
     assert any("哈希" in warning for warning in data["warnings"])
 

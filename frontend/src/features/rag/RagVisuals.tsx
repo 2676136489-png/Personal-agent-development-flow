@@ -9,7 +9,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 
-import type { RagChunk, RagEmbedDetail, RagHit, RagOverlap, RagPoint } from '../../types/rag'
+import type { RagChunk, RagEmbedDetail, RagHit, RagIndexDetail, RagOverlap, RagPoint } from '../../types/rag'
 
 const SEGMENT_TONES = 6
 
@@ -106,6 +106,99 @@ export function VectorHeatmap({ detail }: { detail: RagEmbedDetail }) {
       </p>
     </div>
   )
+}
+
+/* -------------------------------------------------------------- 索引面板 */
+
+/**
+ * 索引长什么样：左边是归一化后的向量矩阵，右边是「词 → 块号」的倒排表，
+ * 底下是它落盘的那几个文件。
+ *
+ * 把这两半分开画，是因为它们回答的是两个不同的问题 ——
+ * 向量管「意思相近」，倒排表管「字面命中」，混合检索就是把这两份结果合起来。
+ */
+export function IndexPanel({ detail }: { detail: RagIndexDetail }) {
+  const total = detail.total_bytes || 1
+  const vectorPercent = Math.max(6, (detail.vector_bytes / total) * 100)
+
+  return (
+    <div className="rag-index">
+      <div className="rag-index__card">
+        <header className="rag-index__head">
+          <span className="rag-index__title">向量索引</span>
+          <span className="rag-index__kind">{detail.kind} · float32</span>
+        </header>
+        <p className="rag-index__spec">
+          {detail.count} × {detail.dims} 已归一化，检索时点积即余弦
+        </p>
+        <div className="rag-index__split" title="按字节占比">
+          <i style={{ width: `${vectorPercent}%` }} />
+        </div>
+        <ul className="rag-index__meta">
+          <li>
+            <span>向量</span>
+            <b>{formatSize(detail.vector_bytes)}</b>
+          </li>
+          <li>
+            <span>倒排</span>
+            <b>{formatSize(detail.term_bytes)}</b>
+          </li>
+          <li>
+            <span>构建</span>
+            <b>{detail.build_ms} ms</b>
+          </li>
+        </ul>
+      </div>
+
+      <div className="rag-index__card">
+        <header className="rag-index__head">
+          <span className="rag-index__title">倒排索引</span>
+          <span className="rag-index__kind">词 → 块号</span>
+        </header>
+        <p className="rag-index__spec">
+          词表 {detail.terms.toLocaleString()} 词 · 倒排项 {detail.postings.toLocaleString()} · 平均{' '}
+          {detail.avg_tokens} 词/块
+        </p>
+        <ul className="rag-index__terms">
+          {detail.sample.map((item) => (
+            <li key={item.term}>
+              <span className="rag-index__term">{item.term}</span>
+              <span className="rag-index__df">{item.df}</span>
+              <span className="rag-index__chips">
+                {item.docs.map((doc) => (
+                  <i key={doc}>#{doc}</i>
+                ))}
+                {item.df > item.docs.length && <em>+{item.df - item.docs.length}</em>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="rag-index__storage">
+        <span className="rag-index__storage-label">落盘</span>
+        {detail.files.length > 0 ? (
+          <>
+            {detail.files.map((file) => (
+              <span className="rag-index__file" key={file.name}>
+                {file.name}
+                <b>{formatSize(file.bytes)}</b>
+              </span>
+            ))}
+            <span className="rag-index__keep">保留最近 {detail.kept} 份 · 写入 {detail.store_ms} ms</span>
+          </>
+        ) : (
+          <span className="rag-index__keep">当前环境不落盘，索引只在内存里（检索不受影响）</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function formatSize(size: number): string {
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`
+  return `${size} B`
 }
 
 /* ------------------------------------------------------------ 向量空间（3D） */

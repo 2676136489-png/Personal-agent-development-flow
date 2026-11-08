@@ -74,7 +74,7 @@ backend/app/
 │   └── sources.py          工具输出 → 可展示的依据来源
 ├── agent/                  自主工具调用循环（选工具 → 执行 → 观察 → 作答）+ 运行历史
 ├── llm/                    统一模型调用层（多家 provider 可切换 + 自动兜底）
-├── rag/                    解析 → 切块 → 向量 → 检索 → 存储（实验台在 lab.py）
+├── rag/                    解析 → 切块 → 向量 → 索引/存储 → 检索（实验台在 lab.py）
 ├── search/                 搜索配额记账与额度决策
 ├── events/                 事件总线 + 落库（可回放）
 ├── observability/          指标与追踪
@@ -198,7 +198,7 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 | 8 | 布局与跳转 | `frontend/scripts/` 下的 CDP 探针脚本 | 元素几何 / 跳转落地状态符合断言 |
 | 9 | 视觉与可读性 | `node scripts/probe-visual-theme.cjs <地址> ""` | 双主题令牌 / 渐变 / 玻璃层 / 字体加载断言全绿 |
 | 10 | 细节点与对比度 | `node scripts/probe-visual-zoom.cjs <地址> dark` | hover 态对比度 ≥4.5:1、网格落到像素 |
-| 11 | RAG 实验台 | `node scripts/probe-rag-page.cjs <地址>` | 四条横区按序堆叠、每区「选项在左 / 详情在右」、详情含官方文档链接、回显正确、五张图齐、色带段数=块卡片数、斜纹重叠>0、prompt 非空、无横向溢出 |
+| 11 | RAG 实验台 | `node scripts/probe-rag-page.cjs <地址>` | 四条横区按序堆叠、每区「选项在左 / 详情在右」、详情含官方文档链接、回显正确、五张图齐、色带段数=块卡片数、斜纹重叠>0、倒排索引有词与块号且索引落盘出两个文件、无横向溢出 |
 | 12 | 文档截图 | `node scripts/docs-screenshots.cjs <地址>` | `docs/images/` 下 6 张首屏图，页面已渲染完（非骨架屏） |
 
 配色不靠肉眼定：`tokens.css` 里每个前景/背景组合的对比度都是脚本实测的

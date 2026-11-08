@@ -10,14 +10,14 @@ import type { Document } from '../../types/knowledge'
 import type {
   RagChunk,
   RagEmbedDetail,
+  RagIndexDetail,
   RagMethodOption,
   RagOptions,
   RagParamDef,
-  RagPromptDetail,
   RagRetrieveDetail,
   RagRunResult,
 } from '../../types/rag'
-import { ChunkRuler, HitList, StatRow, VectorHeatmap, VectorScatter } from './RagVisuals'
+import { ChunkRuler, HitList, IndexPanel, StatRow, VectorHeatmap, VectorScatter } from './RagVisuals'
 
 /* ------------------------------------------------------------------ 默认值 */
 
@@ -283,7 +283,7 @@ export function RagLab() {
       <PageHeader
         eyebrow="RAG 实验台"
         title="把 RAG 的五步摊开看"
-        lede="选一套方法，跑一遍真实的 RAG：解析、切块、向量化、检索、组装上下文。每一步的中间结果都摊在下面，包括切块边界、向量热力图和两种召回各自的排名。"
+        lede="选一套方法，跑一遍真实的 RAG：解析、切块、向量化、建索引、检索。每一步的中间结果都摊在下面，包括切块边界、向量热力图、索引里存了什么和两种召回各自的排名。"
         notes={[
           { term: '怎么用', desc: '按 ①②③④ 依次选好方法 → 下面确认一遍 → 开始 RAG。' },
           { term: '看什么', desc: '重点看「同一份材料换一种切法」和「BM25 与向量的排名差在哪里」。' },
@@ -594,13 +594,13 @@ function ResultView({
   const parse = stage('parse')?.detail
   const chunk = stage('chunk')
   const embed = stage('embed')
+  const indexStage = stage('index')
   const retrieveStage = stage('retrieve')
-  const assemble = stage('assemble')
 
   const chunkDetail = chunk?.detail
   const embedDetail = embed?.detail as RagEmbedDetail | undefined
+  const indexDetail = indexStage?.detail as RagIndexDetail | undefined
   const retrieveDetail = retrieveStage?.detail as RagRetrieveDetail | undefined
-  const promptDetail = assemble?.detail as RagPromptDetail | undefined
 
   const chunkerMeta = options.chunkers.find((item) => item.id === chunkDetail?.strategy)
   const retrieverMeta = options.retrievers.find((item) => item.id === retrieveDetail?.method)
@@ -748,6 +748,32 @@ function ResultView({
 
       <Figure
         no="4"
+        title="建索引与存储"
+        meta={indexStage?.summary}
+        doc={{ doc_url: 'https://github.com/facebookresearch/faiss/wiki/Faiss-indexes' }}
+        docText="索引类型说明 ↗"
+      >
+        {indexDetail && (
+          <>
+            <StatRow
+              items={[
+                { label: '向量条数', value: indexDetail.count.toLocaleString() },
+                { label: '词表大小', value: indexDetail.terms.toLocaleString() },
+                { label: '倒排项', value: indexDetail.postings.toLocaleString() },
+                { label: '索引占用', value: formatBytes(indexDetail.total_bytes) },
+              ]}
+            />
+            <p className="rag-figure__note">
+              向量这一半归一化后存成扁平矩阵（检索时余弦相似度就是一次点积），文本这一半切成词、
+              建成「词 → 块号」的倒排表。索引建好再落一份到磁盘，检索只读它，不碰原始文本。
+            </p>
+            <IndexPanel detail={indexDetail} />
+          </>
+        )}
+      </Figure>
+
+      <Figure
+        no="5"
         title="检索"
         meta={retrieverMeta ? `${retrieverMeta.label} · ${retrieveStage?.summary}` : retrieveStage?.summary}
         doc={retrieverMeta}
@@ -758,7 +784,7 @@ function ResultView({
               items={[
                 { label: '语料块数', value: String(retrieveDetail.meta.corpus_size ?? chunks.length) },
                 { label: '候选池', value: String(retrieveDetail.meta.pool ?? '—') },
-                { label: '进入上下文', value: String(retrieveDetail.selected.length) },
+                { label: '命中块数', value: String(retrieveDetail.selected.length) },
                 {
                   label: '向量分数区间',
                   value: Array.isArray(retrieveDetail.meta.dense_range)
@@ -776,33 +802,6 @@ function ResultView({
             {retrieveDetail.selected.length === 0 && (
               <p className="rag-figure__note">没有块达到阈值，试着调低「最低相似度」。</p>
             )}
-          </>
-        )}
-      </Figure>
-
-      <Figure
-        no="5"
-        title="组装上下文"
-        meta={promptDetail ? `${(promptDetail.chars ?? 0).toLocaleString()} 字 · 约 ${(promptDetail.tokens ?? 0).toLocaleString()} tokens` : ''}
-      >
-        {promptDetail && (
-          <>
-            <StatRow
-              items={[
-                { label: '引用块数', value: String(promptDetail.entries?.length ?? 0) },
-                { label: '上下文原文字数', value: (promptDetail.context_chars ?? 0).toLocaleString() },
-                { label: '整段 prompt', value: (promptDetail.chars ?? 0).toLocaleString() },
-                { label: '估算 tokens', value: (promptDetail.tokens ?? 0).toLocaleString() },
-              ]}
-            />
-            <div className="rag-citations">
-              {(promptDetail.entries ?? []).map((entry) => (
-                <span className="rag-citation" key={entry.n}>
-                  [{entry.n}] 块 #{entry.index} · {entry.chars} 字
-                </span>
-              ))}
-            </div>
-            <pre className="rag-prompt">{promptDetail.text ?? ''}</pre>
           </>
         )}
       </Figure>
@@ -967,12 +966,14 @@ function Figure({
   title,
   meta,
   doc,
+  docText = '方法说明 ↗',
   children,
 }: {
   no: string
   title: string
   meta?: string
-  doc?: RagMethodOption
+  doc?: { doc_url: string }
+  docText?: string
   children: ReactNode
 }) {
   return (
@@ -983,7 +984,7 @@ function Figure({
         <span className="rag-figure__meta">{meta}</span>
         {doc && (
           <a className="rag-figure__doc" href={doc.doc_url} target="_blank" rel="noreferrer noopener">
-            方法说明 ↗
+            {docText}
           </a>
         )}
       </header>
@@ -993,6 +994,12 @@ function Figure({
 }
 
 /* ------------------------------------------------------------------ 工具 */
+
+function formatBytes(size: number): string {
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`
+  return `${size} B`
+}
 
 function pickDefaultEmbedder(options: RagOptions): string | null {
   const preferred = options.embedders.find((item) => item.available && item.semantic)

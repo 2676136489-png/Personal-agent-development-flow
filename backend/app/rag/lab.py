@@ -7,16 +7,22 @@
 
 所以这里把管线拆成五步，每步都产出可渲染的结构：
 
-    parse → chunk → embed → retrieve → assemble
+    parse → chunk → embed → index → retrieve
 
 它**不写库**（除了可选地读取知识库文档的原文），是一台「实验台」：
 换一种切法、换一个向量模型、换一种检索方式，立刻能看到差异。
+
+到检索为止，**不接大模型**：RAG 的前半段是「建索引 + 找回证据」，这一段可以
+完全离线跑通、也完全可测量；把召回结果拼成 prompt 交给模型生成是另一半的事，
+混在一起会让「检索没召回」和「模型没答好」这两类问题分不开。
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -34,7 +40,12 @@ from app.rag.embeddings import (
     get_provider_by_id,
 )
 from app.rag.parsing import ParsedDocument
-from app.rag.retrieval import RETRIEVER_OPTIONS, retrieve
+from app.rag.retrieval import (
+    RETRIEVER_OPTIONS,
+    RetrievalIndex,
+    build_index,
+    search,
+)
 from app.rag.store import new_id
 
 logger = logging.getLogger(__name__)
@@ -44,6 +55,8 @@ TEXT_PREVIEW_LIMIT = 20_000
 # 热力图最多画多少行（payload 控制）
 HEATMAP_ROWS = 40
 HEATMAP_DIMS = 16
+# 落盘索引保留最近几份（实验台产物，没必要长期堆积）
+INDEX_KEEP = 5
 
 
 def _alpha(retrieval: dict[str, Any]) -> float:
@@ -67,6 +80,7 @@ async def run_pipeline(
     """跑一次完整 RAG，返回每步的产物。异常由调用方翻译成业务错误。"""
     settings = get_settings()
     started = time.perf_counter()
+    run_id = new_id("rag")
     stages: list[dict[str, Any]] = []
     warnings: list[str] = []
 
@@ -208,11 +222,46 @@ async def run_pipeline(
         }
     )
 
-    # ---------- 4. 检索 ----------
+    # ---------- 4. 建索引 ----------
+    # 向量化产出的是「一堆数字」，检索要的是「能查的结构」。这一 步把两者之间的
+    # 落差补齐：归一化向量矩阵（检索时余弦 = 一次点积）、BM25 倒排表（词 → 块号），
+    # 并落一份到磁盘 —— 索引本来就该是离线的、可复用的，而不是每次查询重算。
     stage_start = time.perf_counter()
-    outcome = retrieve(
-        texts=[row["content"] for row in chunk_rows],
-        vectors=vectors,
+    texts = [row["content"] for row in chunk_rows]
+    index = build_index(texts, vectors)
+    files = _persist_index(index, run_id)
+    stage_ms = _ms(stage_start)
+    index_payload = {
+        "kind": "flat",
+        "count": index.count,
+        "dims": index.dims,
+        "terms": len(index.postings),
+        "postings": index.posting_count,
+        "avg_tokens": round(index.avg_len, 1),
+        "vector_bytes": index.vector_bytes,
+        "term_bytes": index.term_bytes,
+        "total_bytes": index.vector_bytes + index.term_bytes,
+        "build_ms": index.build_ms,
+        "store_ms": round(max(0.0, stage_ms - index.build_ms), 1),
+        "sample": index.sample_terms(),
+        "files": files,
+        "kept": INDEX_KEEP,
+    }
+    stages.append(
+        {
+            "key": "index",
+            "label": "建索引",
+            "ms": stage_ms,
+            "summary": f"{index.count} 条向量 · 词表 {len(index.postings):,} · {_kb(index.vector_bytes + index.term_bytes)}",
+            "detail": index_payload,
+        }
+    )
+
+    # ---------- 5. 检索 ----------
+    stage_start = time.perf_counter()
+    outcome = search(
+        index,
+        texts=texts,
         query=query,
         query_vector=query_vector,
         method=str(retrieval.get("method") or "hybrid_rrf"),
@@ -246,26 +295,13 @@ async def run_pipeline(
         }
     )
 
-    # ---------- 5. 组装上下文 ----------
-    stage_start = time.perf_counter()
-    prompt = _build_prompt(query=query, hits=outcome.selected, chunks=chunk_rows, title=title)
-    stages.append(
-        {
-            "key": "assemble",
-            "label": "组装上下文",
-            "ms": _ms(stage_start),
-            "summary": f"{prompt['chars']:,} 字 · 约 {prompt['tokens']:,} tokens",
-            "detail": prompt,
-        }
-    )
-
     if not provider.spec.semantic:
         warnings.append(
             "当前向量模型是哈希兜底：能跑通流程，但「换个说法也能找到」的能力不存在"
         )
 
     return {
-        "run_id": new_id("rag"),
+        "run_id": run_id,
         "query": query,
         "title": title,
         "config": {
@@ -422,45 +458,72 @@ def _explained(singular: np.ndarray) -> list[float]:
     return [round(value, 4) for value in ratios]
 
 
-PROMPT_HEADER = (
-    "你是一个严谨的研究助手。请只依据下面提供的资料回答问题；"
-    "资料中没有的信息要明确说「资料中未提及」，不要补全、不要猜测。\n\n"
-)
+def _index_root() -> Path:
+    """索引落盘目录：与 documents 同级，仍在部署目录之外的 data/ 下。"""
+    return Path(get_settings().storage_dir).parent / "rag_index"
 
 
-def _build_prompt(*, query: str, hits: list[dict], chunks: list[dict], title: str) -> dict:
-    """把命中块拼成真正会发给大模型的上下文（含编号，便于要求 [n] 引用）。"""
-    blocks: list[str] = []
-    entries: list[dict] = []
-    for number, hit in enumerate(hits, start=1):
-        chunk = chunks[hit["index"]]
-        where = f"第 {chunk['page']} 页" if chunk["page"] else f"片段 #{chunk['index']}"
-        heading = f" · {chunk['heading']}" if chunk["heading"] else ""
-        blocks.append(
-            f"[{number}] 来源：{title} · {where}{heading}"
-            f"（得分 {hit['score']}）\n{chunk['content']}"
+def _kb(size: int) -> str:
+    if size >= 1024 * 1024:
+        return f"{size / 1024 / 1024:.1f} MB"
+    if size >= 1024:
+        return f"{size / 1024:.0f} KB"
+    return f"{size} B"
+
+
+def _persist_index(index: RetrievalIndex, run_id: str) -> list[dict]:
+    """把索引写一份到磁盘，返回文件清单。
+
+    为什么实验台也要落盘：检索阶段的输入应该是一份**已建好的**索引，而不是
+    内存里那个临时数组 —— 这正是向量库（pgvector / Milvus / FAISS）在做的事。
+    落盘失败不影响检索（只读文件系统上照样能跑），所以这里兜住 OSError。
+    """
+    target = _index_root() / run_id
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        vectors_path = target / "vectors.f32"
+        index.unit.astype(np.float32).tofile(vectors_path)
+        lexicon_path = target / "lexicon.json"
+        lexicon_path.write_text(
+            json.dumps(
+                {
+                    "shape": [index.count, index.dims],
+                    "dtype": "float32",
+                    "normalized": True,
+                    "avg_tokens": round(index.avg_len, 2),
+                    "postings": {term: sorted(rows.items()) for term, rows in index.postings.items()},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
         )
-        entries.append(
-            {
-                "n": number,
-                "index": hit["index"],
-                "score": hit["score"],
-                "page": chunk["page"],
-                "heading": chunk["heading"],
-                "chars": chunk["chars"],
-                "tokens": chunk["tokens"],
-            }
-        )
+        _prune_indexes(target.parent)
+        return [
+            {"name": vectors_path.name, "role": "归一化向量", "bytes": vectors_path.stat().st_size},
+            {"name": lexicon_path.name, "role": "倒排表", "bytes": lexicon_path.stat().st_size},
+        ]
+    except OSError as error:  # pragma: no cover - 只读文件系统
+        logger.warning("索引落盘失败：%s", error)
+        return []
 
-    body = "\n\n".join(blocks) if blocks else "（没有命中任何片段）"
-    text = f"{PROMPT_HEADER}【资料】\n{body}\n\n【问题】\n{query}\n\n【回答】\n"
-    return {
-        "text": text,
-        "chars": len(text),
-        "tokens": estimate_tokens(text),
-        "entries": entries,
-        "context_chars": sum(entry["chars"] for entry in entries),
-    }
+
+def _prune_indexes(root: Path, keep: int = INDEX_KEEP) -> None:
+    """只留最近几份：实验台的索引是演示产物，没必要长期堆积。"""
+    try:
+        candidates = sorted(
+            (path for path in root.iterdir() if path.is_dir()),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:  # pragma: no cover
+        return
+    for stale in candidates[keep:]:
+        try:
+            for child in stale.glob("*"):
+                child.unlink(missing_ok=True)
+            stale.rmdir()
+        except OSError:  # pragma: no cover
+            logger.debug("清理旧索引失败：%s", stale)
 
 
 def build_options() -> dict[str, Any]:

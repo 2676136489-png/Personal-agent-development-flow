@@ -95,7 +95,9 @@ const METRICS = `(() => {
     selectedHits: all('.rag-hit[data-selected="true"]').length,
     statItems: all('.rag-stats__item').length,
     figures: all('.rag-figure').length,
-    promptChars: (document.querySelector('.rag-prompt')?.textContent || '').length,
+    indexTerms: all('.rag-index__terms li').length,
+    indexChips: all('.rag-index__chips i').length,
+    indexFiles: all('.rag-index__file').length,
     runTotal: text('.rag-runbar__total'),
     stepTitles: all('.rag-step__title').map((el) => el.textContent.trim()),
     recapItems: all('.rag-recap__item').length,
@@ -506,7 +508,9 @@ async function main() {
     )
     expect(after?.hitRows > 0, '检索结果没有候选行')
     expect(after?.selectedHits > 0, '没有「进入上下文」的命中行')
-    expect(after?.promptChars > 100, '最终 prompt 是空的')
+    expect(after?.indexTerms > 0, '倒排索引没有列出任何词')
+    expect(after?.indexChips > 0, '倒排表里没有「词 → 块号」的条目')
+    expect(after?.indexFiles >= 2, `索引没有落盘出两个文件：${after?.indexFiles}`)
     expect(!after?.runError, `运行报错：${after?.runError}`)
     expect(
       recursive?.segments > 1 && recursive?.overlaps > 0,
@@ -528,6 +532,8 @@ async function main() {
       hits: s.hitRows,
       selected: s.selectedHits,
       promptChars: s.promptChars,
+      indexTerms: s.indexTerms,
+      indexFiles: s.indexFiles,
       runTotal: s.runTotal,
       steps: s.stepTitles,
       recap: s.recapValues,

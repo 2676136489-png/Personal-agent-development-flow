@@ -15,11 +15,16 @@
 - mmr             最大边际相关性：在相关性之外惩罚「和已选块太像」的块
 
 MMR 与 hybrid 的区别：hybrid 解决「怎么找到」，MMR 解决「找回来的一堆是不是重复的」。
+
+索引与检索是两段：`build_index` 负责归一化向量、给块分词、建倒排表（一次），
+`search` 只查这份索引（多次）。实验台把前者单独摆成一步，就是为了让
+「建索引要花多少时间、占多少内存」变成看得见的数字。
 """
 
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -95,6 +100,117 @@ def cosine_matrix(vectors: np.ndarray) -> np.ndarray:
     return vectors / np.where(norms == 0, 1, norms)
 
 
+@dataclass
+class RetrievalIndex:
+    """建一次、查很多次的索引：归一化后的向量矩阵 + BM25 倒排表。
+
+    为什么要把「建索引」和「检索」拆开：
+    检索阶段本该只查索引，不该每次都重新归一化、重新给每块分词。拆开之后
+    两件事都变得可测量 —— 建一次花了多少毫秒、占多少内存、倒排表多大，
+    这些正是 RAG 里「离线索引 / 在线检索」两段的分界，也是选索引类型
+    （flat / IVF / HNSW）时的依据。
+    """
+
+    unit: np.ndarray
+    postings: dict[str, dict[int, int]]
+    lengths: np.ndarray
+    avg_len: float
+    dims: int
+    build_ms: float
+
+    @property
+    def count(self) -> int:
+        return int(self.unit.shape[0])
+
+    @property
+    def vector_bytes(self) -> int:
+        return int(self.unit.nbytes)
+
+    @property
+    def term_bytes(self) -> int:
+        """倒排表的内存估算：词面按 2 字节/字，每个倒排项按 8 字节（块号 + 词频）。"""
+        return sum(len(term) * 2 + 4 + len(rows) * 8 for term, rows in self.postings.items())
+
+    @property
+    def posting_count(self) -> int:
+        return sum(len(rows) for rows in self.postings.values())
+
+    def sample_terms(self, limit: int = 6, docs_per_term: int = 5) -> list[dict]:
+        """挑文档频率最高的几个词，用来展示倒排表长什么样。"""
+        ranked = sorted(self.postings.items(), key=lambda item: (-len(item[1]), item[0]))[:limit]
+        return [
+            {"term": term, "df": len(rows), "docs": sorted(rows)[:docs_per_term]}
+            for term, rows in ranked
+        ]
+
+
+def build_index(texts: list[str], vectors: list[list[float]]) -> RetrievalIndex:
+    """把块文本与向量加工成可检索的索引。"""
+    started = time.perf_counter()
+    matrix = np.asarray(vectors, dtype=np.float32)
+    if matrix.ndim != 2 or matrix.shape[0] == 0:
+        return RetrievalIndex(
+            unit=np.zeros((0, 0), dtype=np.float32),
+            postings={},
+            lengths=np.zeros(0, dtype=np.float32),
+            avg_len=1.0,
+            dims=0,
+            build_ms=0.0,
+        )
+
+    unit = cosine_matrix(matrix)
+    postings: dict[str, dict[int, int]] = {}
+    lengths = np.zeros(matrix.shape[0], dtype=np.float32)
+    for index, text in enumerate(texts[: matrix.shape[0]]):
+        tokens = bm25_tokens(text)
+        lengths[index] = len(tokens)
+        for token in tokens:
+            rows = postings.get(token)
+            if rows is None:
+                postings[token] = {index: 1}
+            else:
+                rows[index] = rows.get(index, 0) + 1
+
+    avg_len = float(lengths.mean()) if lengths.size else 1.0
+    return RetrievalIndex(
+        unit=unit,
+        postings=postings,
+        lengths=lengths,
+        avg_len=avg_len or 1.0,
+        dims=int(matrix.shape[1]),
+        build_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+
+
+def bm25_from_index(
+    index: RetrievalIndex,
+    query_tokens: list[str],
+    *,
+    k1: float = 1.5,
+    b: float = 0.75,
+) -> np.ndarray:
+    """查倒排表算 BM25：只扫「命中的那几篇」，不再对每个词遍历所有块。"""
+    n_docs = index.count
+    if n_docs == 0 or not query_tokens:
+        return np.zeros(n_docs, dtype=np.float32)
+
+    avg_len = index.avg_len or 1.0
+    scores = np.zeros(n_docs, dtype=np.float32)
+    for term in set(query_tokens):
+        rows = index.postings.get(term)
+        if not rows:
+            continue
+        df = len(rows)
+        idf = float(np.log(1.0 + (n_docs - df + 0.5) / (df + 0.5)))
+        for doc, tf in rows.items():
+            if doc >= n_docs:
+                continue
+            denom = tf + k1 * (1 - b + b * float(index.lengths[doc]) / avg_len)
+            scores[doc] += idf * (tf * (k1 + 1)) / denom
+    return scores
+
+
+
 def _normalize(scores: np.ndarray) -> np.ndarray:
     low, high = float(scores.min()), float(scores.max())
     if high - low < 1e-9:
@@ -134,18 +250,46 @@ def retrieve(
     mmr_lambda: float = 0.7,
     min_score: float = 0.0,
 ) -> RetrievalOutcome:
-    matrix = np.asarray(vectors, dtype=np.float32)
-    if matrix.ndim != 2 or matrix.shape[0] == 0:
+    """建索引 + 查一次。要复用索引就直接用 `build_index` + `search`。"""
+    return search(
+        build_index(texts, vectors),
+        texts=texts,
+        query=query,
+        query_vector=query_vector,
+        method=method,
+        top_k=top_k,
+        candidate_k=candidate_k,
+        rrf_k=rrf_k,
+        alpha=alpha,
+        mmr_lambda=mmr_lambda,
+        min_score=min_score,
+    )
+
+
+def search(
+    index: RetrievalIndex,
+    *,
+    texts: list[str],
+    query: str,
+    query_vector: list[float],
+    method: str,
+    top_k: int,
+    candidate_k: int,
+    rrf_k: int = 60,
+    alpha: float = 0.6,
+    mmr_lambda: float = 0.7,
+    min_score: float = 0.0,
+) -> RetrievalOutcome:
+    if index.count == 0:
         return RetrievalOutcome(method=method, meta={"reason": "没有可检索的向量"})
 
-    unit = cosine_matrix(matrix)
+    unit = index.unit
     query_unit = np.asarray(query_vector, dtype=np.float32)
     q_norm = float(np.linalg.norm(query_unit))
     query_unit = query_unit / q_norm if q_norm else query_unit
     dense = unit @ query_unit
 
-    doc_tokens = [bm25_tokens(text) for text in texts]
-    bm25 = bm25_scores(bm25_tokens(query), doc_tokens)
+    bm25 = bm25_from_index(index, bm25_tokens(query))
     dense_rank = _ranks(dense)
     bm25_rank = _ranks(bm25)
 
