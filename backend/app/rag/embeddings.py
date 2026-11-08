@@ -86,6 +86,8 @@ class EmbedderSpec:
     api_key: str | None = None
     dims: int | None = None
     note: str = ""
+    doc_label: str = ""
+    doc_url: str = ""
 
     @property
     def semantic(self) -> bool:
@@ -102,6 +104,8 @@ class EmbedderSpec:
             "semantic": self.semantic,
             "note": self.note,
             "endpoint": _safe_endpoint(self.base_url),
+            "doc_label": self.doc_label,
+            "doc_url": self.doc_url,
         }
 
 
@@ -142,6 +146,31 @@ def _model_for_tag(tag: str, configured: str) -> str:
     if tag == "ollama" and (model.startswith("text-embedding") or "/" in model):
         return _DEFAULT_MODEL_BY_TAG["ollama"]
     return model
+
+
+# 每个后端给一条官方文档：页面上「选了谁」旁边就能跳过去看接口细节。
+# 硅基流动 / 百炼 / 自建端点都实现同一套 OpenAI 兼容协议，统一指到接口参考。
+_DOC_BY_TAG: dict[str, tuple[str, str]] = {
+    "bigmodel": (
+        "智谱 · Embedding-3 文档",
+        "https://docs.bigmodel.cn/cn/guide/models/embedding/embedding-3",
+    ),
+    "openai": (
+        "OpenAI · Embeddings 指南",
+        "https://platform.openai.com/docs/guides/embeddings",
+    ),
+    "ollama": (
+        "Ollama · Embedding 模型",
+        "https://ollama.com/blog/embedding-models",
+    ),
+}
+
+
+def _doc_for_tag(tag: str) -> tuple[str, str]:
+    return _DOC_BY_TAG.get(
+        tag,
+        ("Embeddings 接口参考", "https://platform.openai.com/docs/api-reference/embeddings"),
+    )
 
 
 def _port_open(base_url: str, timeout: float = 0.4) -> bool:
@@ -341,6 +370,7 @@ def _discover_uncached() -> list[EmbedderSpec]:
     if key and base:
         tag = _host_tag(base)
         model = _model_for_tag(tag, settings.embedding_model)
+        doc_label, doc_url = _doc_for_tag(tag)
         specs.append(
             EmbedderSpec(
                 id=f"{tag}:{model}",
@@ -351,6 +381,8 @@ def _discover_uncached() -> list[EmbedderSpec]:
                 api_key=key,
                 dims=_KNOWN_DIMS.get(model),
                 note="来自 EMBEDDING_BASE_URL / EMBEDDING_API_KEY",
+                doc_label=doc_label,
+                doc_url=doc_url,
             )
         )
 
@@ -362,6 +394,7 @@ def _discover_uncached() -> list[EmbedderSpec]:
         if llm_key and llm_base and llm_is_http:
             tag = _host_tag(llm_base)
             model = _model_for_tag(tag, settings.embedding_model if tag != "bigmodel" else "")
+            doc_label, doc_url = _doc_for_tag(tag)
             specs.append(
                 EmbedderSpec(
                     id=f"{tag}:{model}",
@@ -372,6 +405,8 @@ def _discover_uncached() -> list[EmbedderSpec]:
                     api_key=llm_key,
                     dims=_KNOWN_DIMS.get(model),
                     note="复用 LLM 端点与 Key",
+                    doc_label=doc_label,
+                    doc_url=doc_url,
                 )
             )
 
@@ -381,6 +416,7 @@ def _discover_uncached() -> list[EmbedderSpec]:
         tag = "ollama"
         same_host = base and _host_tag(base) == "ollama"
         model = _model_for_tag(tag, settings.embedding_model if same_host else "")
+        doc_label, doc_url = _doc_for_tag(tag)
         specs.append(
             EmbedderSpec(
                 id=f"{tag}:{model}",
@@ -391,6 +427,8 @@ def _discover_uncached() -> list[EmbedderSpec]:
                 api_key="ollama",
                 dims=_KNOWN_DIMS.get(model),
                 note="本地推理，不需要 Key",
+                doc_label=doc_label,
+                doc_url=doc_url,
             )
         )
 

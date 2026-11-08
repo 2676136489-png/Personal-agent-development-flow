@@ -105,8 +105,26 @@ const METRICS = `(() => {
       if (!flow || !recap) return null
       const a = flow.getBoundingClientRect()
       const b = recap.getBoundingClientRect()
+      // 每一步是一条横区：量它是竖着叠下去的，以及区内「选项在左、详情在右」
+      const bands = Array.from(flow.querySelectorAll('.rag-step')).map((el) => {
+        const options = el.querySelector('.rag-step__options')
+        const pane = el.querySelector('.rag-step__pane')
+        const box = el.getBoundingClientRect()
+        const optBox = options?.getBoundingClientRect()
+        const paneBox = pane?.getBoundingClientRect()
+        return {
+          title: el.querySelector('.rag-step__title')?.textContent.trim(),
+          top: Math.round(box.top),
+          h: Math.round(box.height),
+          optionW: optBox ? Math.round(optBox.width) : 0,
+          paneW: paneBox ? Math.round(paneBox.width) : 0,
+          paneRightOfOptions: !!(optBox && paneBox) && paneBox.left >= optBox.right - 1,
+        }
+      })
       return {
-        cols: getComputedStyle(flow).gridTemplateColumns.split(/\\s+/).filter(Boolean).length,
+        bands,
+        stacked: bands.every((band, index) => index === 0 || band.top > bands[index - 1].top),
+        docs: all('.rag-method-detail__doc').length,
         recapBelowFlow: b.top >= a.bottom - 1,
         resultsBelowRecap: results ? results.getBoundingClientRect().top >= b.bottom - 1 : null,
         flowW: Math.round(a.width),
@@ -206,13 +224,31 @@ async function main() {
     report.steps.push({ name: 'before-run', ...beforeRun })
     const layoutProblems = []
     if (beforeRun.stepTitles.length !== 4) {
-      layoutProblems.push(`步骤列应 4 个，实际 ${beforeRun.stepTitles.length}`)
+      layoutProblems.push(`步骤应 4 步，实际 ${beforeRun.stepTitles.length}`)
     }
     if (beforeRun.recapItems !== 4) {
       layoutProblems.push(`回显项应 4 个，实际 ${beforeRun.recapItems}`)
     }
+    const bands = beforeRun.layout?.bands ?? []
+    if (bands.length !== 4) {
+      layoutProblems.push(`横区应 4 条，实际 ${bands.length}`)
+    }
+    if (!beforeRun.layout?.stacked) {
+      layoutProblems.push(`横区没有竖向依次堆叠：${bands.map((b) => b.top).join('/')}`)
+    }
+    bands.forEach((band) => {
+      if (!band.paneRightOfOptions) {
+        layoutProblems.push(`「${band.title}」的详情没有落在选项右侧`)
+      }
+      if (band.paneW < 460) {
+        layoutProblems.push(`「${band.title}」详情区只有 ${band.paneW}px，展不开正文`)
+      }
+    })
+    if ((beforeRun.layout?.docs ?? 0) < 1) {
+      layoutProblems.push('详情区没有渲染出官方文档链接')
+    }
     if (!beforeRun.layout?.recapBelowFlow) {
-      layoutProblems.push('回显区没有落在流程条下方')
+      layoutProblems.push('回显区没有落在配置区下方')
     }
     if (beforeRun.overflowX) {
       layoutProblems.push(`横向溢出：scrollW ${beforeRun.scrollW} > innerW ${beforeRun.innerW}`)
@@ -367,6 +403,13 @@ async function main() {
 
     expect(before?.loaded && !before?.skeleton, 'RAG 页首屏没有正常渲染（骨架屏未消失）')
     expect(before?.stepTitles.join('') === '语料切块向量化检索', `四步顺序不对：${before?.stepTitles}`)
+    expect(before?.layout?.bands?.length === 4, `横区应为 4 条，实际 ${before?.layout?.bands?.length}`)
+    expect(before?.layout?.stacked === true, '四条横区没有竖向依次堆叠')
+    expect(
+      (before?.layout?.bands ?? []).every((band) => band.paneRightOfOptions),
+      `有横区的详情没落在选项右侧：${(before?.layout?.bands ?? []).map((b) => `${b.title}:${b.paneRightOfOptions}`).join(' ')}`,
+    )
+    expect((before?.layout?.docs ?? 0) >= 1, '详情区没有官方文档链接')
     expect(before?.recapItems === 4, `回显项应为 4 个，实际 ${before?.recapItems}`)
     expect(
       before?.recapLabels.join('/') === '1 · 语料/2 · 切块/3 · 向量/4 · 检索',

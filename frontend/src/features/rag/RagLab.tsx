@@ -292,35 +292,40 @@ export function RagLab() {
       />
 
       <div className="rag-flow" aria-label="RAG 方法配置">
-        <StepColumn step="1" title="语料" desc="喂给 RAG 的材料">
-          <div className="rag-switch" role="tablist" aria-label="语料来源">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={corpusKind === 'text'}
-              className="rag-switch__btn"
-              data-active={corpusKind === 'text'}
-              onClick={() => setCorpusKind('text')}
-            >
-              粘贴文本
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={corpusKind === 'document'}
-              className="rag-switch__btn"
-              data-active={corpusKind === 'document'}
-              onClick={() => setCorpusKind('document')}
-            >
-              知识库（{documents.length}）
-            </button>
-          </div>
-
+        <StepColumn
+          step="1"
+          title="语料"
+          desc="喂给 RAG 的材料"
+          options={
+            <div className="rag-switch" role="tablist" aria-label="语料来源">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={corpusKind === 'text'}
+                className="rag-switch__btn"
+                data-active={corpusKind === 'text'}
+                onClick={() => setCorpusKind('text')}
+              >
+                粘贴文本
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={corpusKind === 'document'}
+                className="rag-switch__btn"
+                data-active={corpusKind === 'document'}
+                onClick={() => setCorpusKind('document')}
+              >
+                知识库（{documents.length}）
+              </button>
+            </div>
+          }
+        >
           {corpusKind === 'text' ? (
             <>
               <textarea
                 className="input rag-textarea"
-                rows={8}
+                rows={7}
                 value={text}
                 onChange={(event) => setText(event.target.value)}
                 placeholder="粘贴一段要检索的中文材料…"
@@ -352,46 +357,57 @@ export function RagLab() {
             </label>
           )}
 
-          <div className="rag-corpus">
-            <div className="rag-corpus__grid">
-              {corpusFacts.map((item) => (
-                <div className="rag-corpus__cell" key={item.label}>
-                  <span className="rag-corpus__value">{item.value}</span>
-                  <span className="rag-corpus__label">{item.label}</span>
-                </div>
-              ))}
+          <div className="rag-corpus-row">
+            <div className="rag-corpus">
+              <div className="rag-corpus__grid">
+                {corpusFacts.map((item) => (
+                  <div className="rag-corpus__cell" key={item.label}>
+                    <span className="rag-corpus__value">{item.value}</span>
+                    <span className="rag-corpus__label">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="rag-corpus__note">
+                {corpusKind === 'document'
+                  ? '块按库里的切片走；想换切法，用左边「粘贴文本」跑一遍对比。'
+                  : `块数按 ${chunking.chunk_size} 字 / 重叠 ${chunking.overlap} 估算，实际以运行结果为准。`}
+              </p>
             </div>
-            <p className="rag-corpus__note">
-              {corpusKind === 'document'
-                ? '块按库里的切片走；想换切法，用左边「粘贴文本」跑一遍对比。'
-                : `块数按 ${chunking.chunk_size} 字 / 重叠 ${chunking.overlap} 估算，实际以运行结果为准。`}
-            </p>
-          </div>
 
-          <label className="field">
-            <span className="field__label">要检索的问题</span>
-            <input
-              className="input"
-              value={query}
-              maxLength={200}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="例如：向量检索召回率怎么提升"
-            />
-          </label>
+            <label className="field">
+              <span className="field__label">要检索的问题</span>
+              <input
+                className="input"
+                value={query}
+                maxLength={200}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="例如：向量检索召回率怎么提升"
+              />
+            </label>
+          </div>
         </StepColumn>
 
-        <StepColumn step="2" title="切块" desc="决定检索的最小单位">
-          <MethodPicker
-            options={options.chunkers}
-            value={chunking.strategy}
-            onChange={(id) => setChunking((prev) => ({ ...prev, strategy: id }))}
+        <StepColumn
+          step="2"
+          title="切块"
+          desc="决定检索的最小单位"
+          options={
+            <MethodList
+              name="切块方法"
+              options={options.chunkers}
+              value={chunking.strategy}
+              onChange={(id) => setChunking((prev) => ({ ...prev, strategy: id }))}
+            />
+          }
+        >
+          <MethodDetail
+            option={activeChunker}
             note={
               activeChunker?.needs_embedding
                 ? '这一步会先调用向量模型算句向量，耗时比其他切法高。'
                 : undefined
             }
           />
-          {activeChunker && <p className="rag-bestfor">适合：{activeChunker.best_for}</p>}
           <div className="rag-params">
             {(activeChunker?.params ?? []).map((name) => (
               <ParamField
@@ -406,65 +422,105 @@ export function RagLab() {
           </div>
         </StepColumn>
 
-        <StepColumn step="3" title="向量化" desc="把块变成向量">
-          <div className="rag-embedders">
-            {options.embedders.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="rag-embedder"
-                data-active={embedderId === item.id}
-                disabled={!item.available}
-                onClick={() => setEmbedderId(item.id)}
-              >
-                <span className="rag-embedder__label">{item.label}</span>
-                <span className="rag-embedder__meta">
-                  {/* label 里已经带了模型名就不再重复，只留维度 */}
+        <StepColumn
+          step="3"
+          title="向量化"
+          desc="把块变成向量"
+          options={
+            <div className="rag-methods" role="radiogroup" aria-label="向量后端">
+              {options.embedders.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={embedderId === item.id}
+                  className="rag-method rag-method--block"
+                  data-active={embedderId === item.id}
+                  disabled={!item.available}
+                  onClick={() => setEmbedderId(item.id)}
+                >
+                  <span className="rag-method__label">{item.label}</span>
+                  <span className="rag-method__meta">
+                    {[
+                      item.label.includes(item.model) ? null : item.model,
+                      item.dims ? `${item.dims} 维` : null,
+                      item.semantic ? '语义' : '仅字面',
+                      item.available ? null : '不可用',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          }
+        >
+          {activeEmbedder && (
+            <>
+              <div className="rag-method-detail">
+                <div className="rag-method-detail__head">
+                  <h4 className="rag-method-detail__title">{activeEmbedder.label}</h4>
+                  {activeEmbedder.doc_url && (
+                    <a
+                      className="rag-method-detail__doc"
+                      href={activeEmbedder.doc_url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      {activeEmbedder.doc_label} ↗
+                    </a>
+                  )}
+                </div>
+                <p className="rag-method-detail__text">
                   {[
-                    item.label.includes(item.model) ? null : item.model,
-                    item.dims ? `${item.dims} 维` : null,
+                    `模型 ${activeEmbedder.model}`,
+                    activeEmbedder.dims ? `${activeEmbedder.dims} 维` : null,
+                    activeEmbedder.endpoint ? `端点 ${activeEmbedder.endpoint}` : null,
                   ]
                     .filter(Boolean)
                     .join(' · ')}
-                </span>
-                <span className="rag-embedder__tags">
-                  <em data-kind={item.semantic ? 'semantic' : 'literal'}>
-                    {item.semantic ? '语义' : '仅字面'}
-                  </em>
-                  {!item.available && <em data-kind="off">不可用</em>}
-                </span>
-                {item.note && <span className="rag-embedder__note">{item.note}</span>}
-              </button>
-            ))}
-          </div>
+                </p>
+                {activeEmbedder.note && (
+                  <p className="rag-method-detail__text">{activeEmbedder.note}</p>
+                )}
+              </div>
 
-          <dl className="rag-facts">
-            <div className="rag-facts__row">
-              <dt>维度</dt>
-              <dd>{activeEmbedder?.dims ? `${activeEmbedder.dims} 维` : '—'}</dd>
-            </div>
-            <div className="rag-facts__row">
-              <dt>相似度</dt>
-              <dd>余弦 · 归一化</dd>
-            </div>
-            <div className="rag-facts__row">
-              <dt>换后端</dt>
-              <dd>旧向量退出</dd>
-            </div>
-          </dl>
+              <dl className="rag-facts">
+                <div className="rag-facts__row">
+                  <dt>维度</dt>
+                  <dd>{activeEmbedder.dims ? `${activeEmbedder.dims} 维` : '—'}</dd>
+                </div>
+                <div className="rag-facts__row">
+                  <dt>相似度</dt>
+                  <dd>余弦 · 归一化</dd>
+                </div>
+                <div className="rag-facts__row">
+                  <dt>换后端</dt>
+                  <dd>旧向量退出</dd>
+                </div>
+              </dl>
 
-          <p className="rag-note">
-            语义切分也调这个模型找断点，所以换后端会连带改变切法；一步里只算一遍，块越多越慢。
-          </p>
+              <p className="rag-note">
+                语义切分也调这个模型找断点，所以换后端会连带改变切法；一步里只算一遍，块越多越慢。
+              </p>
+            </>
+          )}
         </StepColumn>
 
-        <StepColumn step="4" title="检索" desc="从所有块里挑出这几条">
-          <MethodPicker
-            options={options.retrievers}
-            value={retrieval.method}
-            onChange={(id) => setRetrieval((prev) => ({ ...prev, method: id }))}
-          />
-          {activeRetriever && <p className="rag-bestfor">适合：{activeRetriever.best_for}</p>}
+        <StepColumn
+          step="4"
+          title="检索"
+          desc="从所有块里挑出这几条"
+          options={
+            <MethodList
+              name="检索方法"
+              options={options.retrievers}
+              value={retrieval.method}
+              onChange={(id) => setRetrieval((prev) => ({ ...prev, method: id }))}
+            />
+          }
+        >
+          <MethodDetail option={activeRetriever} />
           <div className="rag-params">
             {(activeRetriever?.params ?? []).map((name) => (
               <ParamField
@@ -751,27 +807,35 @@ function ResultView({
 
 /* --------------------------------------------------------------- 小组件 */
 
+/** 一步 = 一条横区：标题占一行，下面左边竖排选项、右边放选中项的详情。
+ *
+ *  为什么横过来：四步并排时每步只有 ~260px，选项和说明只能上下叠，
+ *  说明被挤成十来个字一行；语料的原文更是只能看见两三行。
+ *  改成横区之后语料有整行宽度，选项仍然是竖排的一列，视线只需左右跳一次。 */
 function StepColumn({
   step,
   title,
   desc,
+  options,
   children,
 }: {
   step: string
   title: string
   desc: string
+  options?: ReactNode
   children: ReactNode
 }) {
   return (
     <section className="rag-step">
       <header className="rag-step__head">
         <span className="rag-step__no">{step}</span>
-        <div className="rag-step__heading">
-          <h3 className="rag-step__title">{title}</h3>
-          <p className="rag-step__desc">{desc}</p>
-        </div>
+        <h3 className="rag-step__title">{title}</h3>
+        <span className="rag-step__desc">{desc}</span>
       </header>
-      <div className="rag-step__body">{children}</div>
+      <div className="rag-step__body">
+        {options && <div className="rag-step__options">{options}</div>}
+        <div className="rag-step__pane">{children}</div>
+      </div>
     </section>
   )
 }
@@ -790,51 +854,60 @@ function RecapItem({ step, label, value }: { step: string; label: string; value:
   )
 }
 
-/** 方法选择：一行一个，选中后只在下方展开这一个方法的说明与出处 */
-function MethodPicker({
+/** 方法选择：一列单选行，只放名字 —— 说明放到右边的详情区，
+ *  这样左边扫一眼就能比完五个方法，不用在选项之间滚动。 */
+function MethodList({
+  name,
   options,
   value,
   onChange,
-  note,
 }: {
+  name: string
   options: RagMethodOption[]
   value: string
   onChange: (id: string) => void
-  note?: string
 }) {
-  const active = options.find((item) => item.id === value)
   return (
-    <>
-      <div className="rag-methods" role="radiogroup">
-        {options.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="radio"
-            aria-checked={value === item.id}
-            className="rag-method"
-            data-active={value === item.id}
-            onClick={() => onChange(item.id)}
-          >
-            <span className="rag-method__label">{item.label}</span>
-          </button>
-        ))}
-      </div>
-      {active && (
-        <div className="rag-method-detail">
-          <p className="rag-method-detail__text">{active.summary}</p>
+    <div className="rag-methods" role="radiogroup" aria-label={name}>
+      {options.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          role="radio"
+          aria-checked={value === item.id}
+          className="rag-method"
+          data-active={value === item.id}
+          onClick={() => onChange(item.id)}
+        >
+          <span className="rag-method__label">{item.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** 选中项的详情：名称 + 官方文档链接 + 摘要 + 适用场景。 */
+function MethodDetail({ option, note }: { option?: RagMethodOption; note?: string }) {
+  if (!option) return null
+  return (
+    <div className="rag-method-detail">
+      <div className="rag-method-detail__head">
+        <h4 className="rag-method-detail__title">{option.label}</h4>
+        {option.doc_url && (
           <a
             className="rag-method-detail__doc"
-            href={active.doc_url}
+            href={option.doc_url}
             target="_blank"
             rel="noreferrer noopener"
           >
-            {active.doc_label} ↗
+            {option.doc_label} ↗
           </a>
-        </div>
-      )}
-      {note && <p className="rag-figure__note">{note}</p>}
-    </>
+        )}
+      </div>
+      <p className="rag-method-detail__text">{option.summary}</p>
+      {option.best_for && <p className="rag-bestfor">适合：{option.best_for}</p>}
+      {note && <p className="rag-note">{note}</p>}
+    </div>
   )
 }
 

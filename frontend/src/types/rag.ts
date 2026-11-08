@@ -32,6 +32,8 @@ export interface RagEmbedderOption {
   endpoint: string
   available: boolean
   recommended: boolean
+  doc_label: string
+  doc_url: string
 }
 
 export interface RagOptions {

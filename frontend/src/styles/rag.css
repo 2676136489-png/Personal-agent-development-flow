@@ -9,13 +9,13 @@
   min-height: 60vh;
 }
 
-/* 四步横向流程：一条横带里依次 1 语料 → 2 切块 → 3 向量化 → 4 检索。
-   原来是 320px 左栏 + 一大片空的结果区，选项挤成一根竖线，选完还得滚回去核对；
-   摊成横带之后四步的关系一眼可见，参数也放得下。
-   面本身就是一块工作台：只靠 1px 边框和底色分层，不加投影 —— 卡片浮起来会更像营销页。 */
+/* 四步横区：1 语料 → 2 切块 → 3 向量化 → 4 检索，一步一条横带。
+   早先是四列并排，每列只有 ~260px，选项和说明只能上下叠：说明被压成十来个字一行，
+   语料的原文也只看得见两三行。摊成横带之后，每条带里左边竖排选项、右边放详情，
+   语料拿到整行宽度，参数也能并排铺。
+   面本身就是一块工作台：只靠 1px 边框和底色分层，不加投影 —— 卡片浮起来更像营销页。 */
 .rag-flow {
   display: grid;
-  grid-template-columns: 1.3fr 1.05fr 0.95fr 1.1fr;
   margin-top: var(--space-5);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -24,30 +24,27 @@
 }
 
 .rag-step {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  display: grid;
   min-width: 0;
-  padding: var(--space-4);
 }
 
 .rag-step + .rag-step {
-  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
 }
 
+/* 标题压成一行：步号 + 标题 + 一句说明，说明紧跟标题、字号更小 */
 .rag-step__head {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
-  /* 裸序号按基线对齐，才和标题首行坐在同一条线上 */
+  display: flex;
   align-items: baseline;
-  padding-bottom: var(--space-3);
+  gap: 10px;
+  padding: 10px var(--space-4);
   border-bottom: 1px solid var(--line);
+  background: var(--surface-alt);
 }
 
 /* 步号不用色块：加边框的方块读起来像控件，裸的等宽序号才是「第几步」 */
 .rag-step__no {
-  min-width: 18px;
+  min-width: 14px;
   color: var(--faint);
   font-family: var(--mono);
   font-size: 0.72rem;
@@ -55,35 +52,60 @@
   letter-spacing: 0.02em;
 }
 
-.rag-step__heading {
-  min-width: 0;
-}
-
 .rag-step__title {
   margin: 0;
   font-size: 0.88rem;
   font-weight: 650;
   color: var(--ink);
+  white-space: nowrap;
 }
 
 .rag-step__desc {
-  margin: 1px 0 0;
-  font-size: 0.7rem;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.72rem;
   line-height: 1.45;
   color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* 左选项 / 右详情：选项列固定窄，剩下全给详情。
+   竖向分割线用 1px 实线，跟外框同一层级，不额外加阴影。 */
 .rag-step__body {
   display: grid;
-  gap: var(--space-3);
+  grid-template-columns: 208px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.rag-step__options {
+  display: grid;
   align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.rag-step__pane {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+  /* 比左栏多 6px：左栏是「3px 容器内边距 + 6px 行内边距」起的头，
+     右边减掉差就对齐了，两边的标题才坐在同一条线上 */
+  padding: calc(var(--space-3) + 6px) var(--space-4) var(--space-4);
 }
 
 /* ---- 语料切换 ---- */
 
+/* 竖排的切换条：和右边三个模块的选项列同一个位置、同一个读法，
+   选中的一格抬到 surface 上，看起来像「当前停在哪个页签」。 */
 .rag-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 3px;
   border-radius: var(--radius-sm);
@@ -94,8 +116,9 @@
   border: 0;
   background: transparent;
   border-radius: var(--radius-xs);
-  padding: 6px 8px;
-  font-size: 0.75rem;
+  padding: 7px 9px;
+  text-align: left;
+  font-size: 0.76rem;
   color: var(--muted);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
@@ -104,14 +127,16 @@
 .rag-switch__btn[data-active='true'] {
   background: var(--surface);
   color: var(--ink);
+  font-weight: 600;
 }
 
+/* 原文要看得见：横区给足了宽度，高度也放一档，一屏能看到十几行 */
 .rag-textarea {
-  min-height: 120px;
+  min-height: 168px;
   resize: vertical;
   font-family: var(--mono);
-  font-size: 0.76rem;
-  line-height: 1.6;
+  font-size: 0.78rem;
+  line-height: 1.7;
 }
 
 .rag-inline {
@@ -133,18 +158,25 @@
 
 /* ---- 语料体检 ---- */
 
-/* 三个小格：字符/段落/预计块（文档模式换成库里的元数据）。
+/* 三个小格 + 问题输入并排：横区有整行宽度，摊开比竖着堆省一半高度。
    1px 间隙露出底色当分隔线，比给每格加 border 干净。 */
+.rag-corpus-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: var(--space-3) var(--space-4);
+  align-items: start;
+}
+
 .rag-corpus {
   display: grid;
   gap: 6px;
-  padding-top: var(--space-3);
-  border-top: 1px dashed var(--line-strong);
 }
 
 .rag-corpus__grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* 三个数各占一列就够：横区有 780px，拉满会显得空 */
+  max-width: 480px;
   gap: 1px;
   border-radius: var(--radius-sm);
   background: var(--line);
@@ -183,8 +215,8 @@
 
 /* ---- 方法选择 ---- */
 
-/* 方法选择：一行一个单选行，说明只在选中后展开。
-   五个方法各带两三行摘要时，光选项就要滚两屏，选了什么反而看不清。 */
+/* 方法选择：一列单选行，名字放在左栏；说明挪到右边详情区，
+   左边就能一眼扫完五个方法，不用在说明文字之间滚动。 */
 .rag-methods {
   display: grid;
   gap: 2px;
@@ -206,6 +238,21 @@
   color: var(--ink-soft);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+/* 向量后端的名字比切块方法长（「智谱 BigModel · embedding-3」），
+   这一档允许折到两行，底下的维度/语义说明再跟在后面。 */
+.rag-method--block {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.rag-method--block::before {
+  margin-top: 4px;
+}
+
+.rag-method--block .rag-method__label {
+  white-space: normal;
 }
 
 .rag-method::before {
@@ -243,50 +290,78 @@
   white-space: nowrap;
 }
 
+/* 向量后端多一行元信息：换行到 label 下面，左边缩进对齐文字（9px 圆点 + 8px 间距） */
+.rag-method__meta {
+  flex: 1 0 100%;
+  padding-left: 17px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+/* 选中项的详情：不再是画在选项下面的小方块，而是右侧整块说明区，
+   去掉边框和底色，只靠字号和层级分主次 —— 横区里已经不缺结构感。 */
 .rag-method-detail {
   display: grid;
-  gap: 5px;
-  padding: 9px 10px;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-alt);
+  gap: 6px;
+}
+
+.rag-method-detail__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px var(--space-3);
+}
+
+.rag-method-detail__title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--ink);
 }
 
 .rag-method-detail__text {
   margin: 0;
-  font-size: 0.71rem;
-  line-height: 1.6;
+  font-size: 0.76rem;
+  line-height: 1.65;
   color: var(--muted);
 }
 
+/* 官方文档跳转：等宽小字 + 下划线，一眼看出是可以点走的出处 */
 .rag-method-detail__doc {
+  flex: 0 0 auto;
   font-family: var(--mono);
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   color: var(--accent-ink);
   text-decoration: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  border-bottom: 1px solid var(--accent-border);
+  transition: border-color var(--dur-fast) var(--ease);
 }
 
 .rag-method-detail__doc:hover {
-  text-decoration: underline;
+  border-bottom-color: var(--accent);
 }
 
 .rag-bestfor {
   margin: 0;
-  font-size: 0.73rem;
-  line-height: 1.55;
-  color: var(--muted);
   padding-left: var(--space-2);
   border-left: 2px solid var(--accent-border);
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--muted);
 }
 
 /* ---- 参数滑杆 ---- */
 
+/* 详情区有整行宽度，参数并排铺；窄下来自动折行。
+   滑杆挤在 200px 左右最舒服，再宽就分不清档位了。 */
 .rag-params {
   display: grid;
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--space-3) var(--space-4);
+  align-items: start;
 }
 
 .rag-param {
@@ -337,116 +412,39 @@
   grid-column: 1 / -1;
 }
 
-/* ---- 向量后端 ---- */
-
-.rag-embedders {
-  display: grid;
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-alt);
-}
-
-.rag-embedder {
-  position: relative;
-  display: grid;
-  grid-template-columns: 11px minmax(0, 1fr);
-  gap: 1px 8px;
-  align-items: start;
-  padding: 8px 9px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-/* 圆点独占第一列，跟 label 首行对齐；不写 grid-column 会被自动排布塞进
-   11px 宽的第一列，整张卡被撑成几百像素高。 */
-.rag-embedder::before {
-  content: '';
-  grid-column: 1;
-  grid-row: 1;
-  align-self: start;
-  margin-top: 4px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  border: 1.5px solid var(--line-strong);
-}
-
-.rag-embedder__label,
-.rag-embedder__meta,
-.rag-embedder__note {
-  grid-column: 2;
-}
-
-.rag-embedder[data-active='true'] {
-  background: var(--surface);
-  border-color: var(--accent-border);
-}
-
-.rag-embedder[data-active='true']::before {
-  border-color: var(--accent);
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-tint-strong);
-}
-
-.rag-embedder:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.rag-embedder__label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--ink);
-  word-break: break-word;
-}
-
-.rag-embedder__meta {
-  font-family: var(--mono);
-  font-size: 0.65rem;
-  line-height: 1.45;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-
-.rag-embedder__note {
-  margin-top: 2px;
-  font-size: 0.66rem;
-  line-height: 1.45;
-  color: var(--faint);
-}
-
-/* 向量化的固定事实：不随选择变化的那几条，右侧对齐成小表 */
+/* 向量化的固定事实：不随选择变化的那几条，摊成和语料同样的小格 */
 .rag-facts {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 1px;
   margin: 0;
-  border-top: 1px dashed var(--line-strong);
+  max-width: 480px;
+  border-radius: var(--radius-sm);
+  background: var(--line);
+  overflow: hidden;
 }
 
 .rag-facts__row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--space-2);
-  padding: 5px 0;
-  border-bottom: 1px dashed var(--line);
+  display: grid;
+  grid-template-areas: 'v' 'l';
+  gap: 2px;
+  padding: 7px 9px;
+  background: var(--surface-alt);
 }
 
 .rag-facts__row dt {
-  font-size: 0.7rem;
+  grid-area: l;
+  font-size: 0.64rem;
   color: var(--faint);
 }
 
 .rag-facts__row dd {
+  grid-area: v;
   margin: 0;
   font-family: var(--mono);
-  font-size: 0.68rem;
-  color: var(--ink-soft);
-  text-align: right;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink);
 }
 
 .rag-note {
@@ -454,38 +452,6 @@
   font-size: 0.68rem;
   line-height: 1.55;
   color: var(--faint);
-}
-
-.rag-embedder__tags {
-  grid-column: 2;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 3px;
-}
-
-.rag-embedder__tags em {
-  font-style: normal;
-  font-family: var(--mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.04em;
-  padding: 1px 6px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--accent-border);
-  background: var(--accent-tint);
-  color: var(--accent-ink);
-}
-
-.rag-embedder__tags em[data-kind='literal'] {
-  border-color: var(--line-strong);
-  background: var(--surface-alt);
-  color: var(--muted);
-}
-
-.rag-embedder__tags em[data-kind='off'] {
-  border-color: var(--warn-border);
-  background: var(--warn-bg);
-  color: var(--warn);
 }
 
 /* ---- 运行区 ---- */
@@ -1135,40 +1101,48 @@
 
 /* ---- 响应式 ---- */
 
-/* 四列压到 2×2：容器窄于 1180 时，四列里的方法说明会挤成窄条 */
+/* 容器窄于 1180：先收选项列，详情区的宽度优先 */
 @media (max-width: 1180px) {
-  .rag-flow {
+  .rag-step__body {
+    grid-template-columns: 176px minmax(0, 1fr);
+  }
+
+  .rag-params {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+}
+
+/* 窄于 900：左右两栏挤不出能读的字宽了，选项改成顶部一排，
+   详情仍在下方 —— 顺序不变，只是「左」变成了「上」。 */
+@media (max-width: 900px) {
+  .rag-step__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rag-step__options {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .rag-methods {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .rag-switch {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .rag-step + .rag-step {
-    border-left: 0;
-    border-top: 0;
+  .rag-corpus-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .rag-step:nth-child(even) {
-    border-left: 1px solid var(--line);
-  }
-
-  .rag-step:nth-child(n + 3) {
-    border-top: 1px solid var(--line);
+  .rag-method__meta {
+    flex: 0 0 auto;
+    padding-left: 0;
   }
 }
 
 @media (max-width: 860px) {
-  .rag-flow {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .rag-step + .rag-step,
-  .rag-step:nth-child(even) {
-    border-left: 0;
-  }
-
-  .rag-step:nth-child(n + 2) {
-    border-top: 1px solid var(--line);
-  }
-
   .rag-recap {
     flex-direction: column;
     align-items: stretch;
