@@ -71,14 +71,13 @@ function connect(wsUrl) {
 }
 
 /* 要截的页面。route 为空表示首页；theme 决定明暗。
-   路由名见 App.tsx 的 NAV_GROUPS：workflow=深度研究、research=研究规划。
+   路由名见 App.tsx 的 NAV_GROUPS：workflow=深度研究、rag=RAG 流程。
    prepare 是截图前要先跑的一段脚本（如 RAG 页要先真跑一次链路），
    waitFor 是等它出现的选择器，scrollY 返回要滚到的位置 —— 首屏缺省为 0。 */
 const SHOTS = [
   { file: 'overview-light.jpg', route: '', theme: 'light', wait: 3200 },
   { file: 'overview-dark.jpg', route: '', theme: 'dark', wait: 3200 },
   { file: 'research-workflow.jpg', route: 'workflow', theme: 'light', wait: 3600 },
-  { file: 'research-planner.jpg', route: 'research', theme: 'light', wait: 3000 },
   { file: 'knowledge-base.jpg', route: 'knowledge', theme: 'light', wait: 3000 },
   {
     file: 'rag-lab.jpg',
@@ -94,7 +93,6 @@ const SHOTS = [
       return fig ? fig.getBoundingClientRect().top + window.scrollY - 92 : 0
     })()`
   },
-  { file: 'agent-runner.jpg', route: 'agent', theme: 'dark', wait: 3000 },
   { file: 'reports.jpg', route: 'reports', theme: 'light', wait: 3000 }
 ]
 

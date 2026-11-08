@@ -122,7 +122,7 @@ export function KnowledgeBase({ onNavigate }: KnowledgeBaseProps) {
       <PageHeader
         eyebrow="知识库"
         title="喂一份资料，它就能引用"
-        lede="上传 PDF / Markdown / TXT，系统自动解析、切块、向量化，供研究智能体在检索时引用，让结论有据可依。"
+        lede="上传 PDF / Markdown / TXT，系统自动解析、切块、向量化，供研究检索时引用，让结论有据可依。"
         notes={[
           { term: '能做什么', desc: '把私有文档变成可被检索、可被引用、带页码出处的证据源。' },
           { term: '怎么用', desc: '上传文件 → 等解析完成 → 展开「片段」能看到它被切成了什么。' },

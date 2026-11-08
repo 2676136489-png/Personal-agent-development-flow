@@ -40,7 +40,6 @@ import { EmptyState } from '../../components/EmptyState'
 import { ErrorState } from '../../components/ErrorState'
 import type { RunStatus } from '../../types/graph'
 import { normalizeMaxIterations, type CurrentRun } from './currentRun'
-import { takePrefillQuestion } from './prefill'
 
 const EXAMPLE_QUESTION =
   '研究 2026 年 AI Agent 开发岗位的核心技术要求，并分析不同公司的岗位要求有什么共同点。'
@@ -693,14 +692,6 @@ export function ResearchWorkflow({ focusThread }: ResearchWorkflowProps) {
     }
     if (restoredRef.current) return
     restoredRef.current = true
-    // [B22] 「研究规划 → 拿去跑深度研究」的一键带入：预填内容优先于历史运行恢复，
-    // 消费后聚焦输入框，用户确认无误即可直接启动。
-    const prefill = takePrefillQuestion()
-    if (prefill) {
-      setQuestion(prefill)
-      window.setTimeout(() => questionRef.current?.focus(), 50)
-      return
-    }
     const threadId = readLastThread()
     if (!threadId) return
     void (async () => {
@@ -740,7 +731,7 @@ export function ResearchWorkflow({ focusThread }: ResearchWorkflowProps) {
           { term: '能做什么', desc: '产出一份结构化、每条结论都能溯源到原始来源的研究报告。' },
           { term: '怎么用', desc: '输入问题 → 设定轮数 → 启动 → 跟随步骤条 → 在确认闸门把关 → 取走报告。' },
           { term: '回炉是什么', desc: '验证判定证据不足时，会自动退回补充检索再核对，直到通过或达到上限。' },
-          { term: '与智能体的区别', desc: '这里在写报告前会人工把关；智能体则一路跑到出答案。' },
+          { term: '为什么中途会停', desc: '写最终报告前会主动中断，等你确认方向再落笔，避免白跑一轮。' },
         ]}
       />
 
@@ -947,7 +938,7 @@ export function ResearchWorkflow({ focusThread }: ResearchWorkflowProps) {
             <div className="module-section__body">
               <p>
                 「深度研究」是<strong>完整的研究流水线</strong>，基于 LangGraph 把理解、计划、研究/检索循环、分析、验证、报告串起来。
-                与「智能体」的端到端自动运行不同，工作流会在撰写最终报告前<strong>主动中断</strong>，让你确认方向、补充要求或终止任务，避免模型擅自生成你不满意的报告。
+                流程会在撰写最终报告前<strong>主动中断</strong>，让你确认方向、补充要求或终止任务，避免模型擅自生成你不满意的报告。
               </p>
               <p>
                 它适合对研究质量要求更高、需要在关键节点人工介入的场景，例如行业分析、竞品调研、岗位需求研究等。

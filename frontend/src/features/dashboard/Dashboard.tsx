@@ -7,7 +7,7 @@ import { Reveal } from '../../components/Reveal'
 import { Stagger, StaggerItem } from '../../components/Stagger'
 import { CountUp } from '../../components/CountUp'
 import { PipelineDiagram } from '../../components/PipelineDiagram'
-import { BotIcon, BookIcon, DocIcon, FlaskIcon } from '../../components/icons'
+import { BookIcon, DocIcon, FlaskIcon } from '../../components/icons'
 import type { IconProps } from '../../components/icons'
 import type { ComponentType } from 'react'
 import { FlowOverview } from '../workflow/FlowOverview'
@@ -29,13 +29,11 @@ const ENTRY_CARDS: {
   primary?: boolean
 }[] = [
   { key: 'workflow', icon: FlaskIcon, title: '深度研究', desc: '跑一遍完整研究，写报告前可先确认方向。', primary: true },
-  { key: 'agent', icon: BotIcon, title: '智能体', desc: '给个任务，自动查资料并给出带引用的答案。' },
   { key: 'knowledge', icon: BookIcon, title: '知识库', desc: '上传自己的资料，让研究能引用内部文档。' },
   { key: 'reports', icon: DocIcon, title: '研究报告', desc: '查看已完成的研究报告，支持全文阅读。' },
 ]
 
 const ENTRY_LINKS: { key: string; label: string }[] = [
-  { key: 'research', label: '研究规划' },
   { key: 'rag', label: 'RAG 流程' },
   { key: 'evaluation', label: '效果评估' },
   { key: 'settings', label: '系统设置' },
@@ -111,7 +109,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: NavigateFn }) {
         </StaggerItem>
         <StaggerItem>
           <p className="hero-lede">
-            输入一个研究问题，智能体自动完成「理解 → 规划 → 检索 → 分析 → 核对 → 写报告」，
+            输入一个研究问题，平台自动完成「理解 → 规划 → 检索 → 分析 → 核对 → 写报告」，
             过程实时可见，写报告前会停下来等你确认，每条结论都标了来源。
           </p>
         </StaggerItem>
@@ -194,8 +192,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: NavigateFn }) {
           <p className="eyebrow">从这里开始</p>
           <h2>四个入口，覆盖一次研究的完整生命周期。</h2>
           <p className="section-lede">
-            不知道从哪开始就用「深度研究」；只想快速问一句用「智能体」；
-            有自己的资料先传进「知识库」，结论才会引用它。
+            不知道从哪开始就用「深度研究」；有自己的资料先传进「知识库」，结论才会引用它。
           </p>
         </Reveal>
         <div className="entry-grid">
@@ -231,7 +228,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: NavigateFn }) {
           <p className="eyebrow">研究流程</p>
           <h2>七步流水线，每一步都看得见。</h2>
           <p className="section-lede">
-            从理解问题到产出报告，智能体按固定节奏推进；检索与分析会循环迭代，直到证据足够。
+            从理解问题到产出报告，流程按固定节奏推进；检索与分析会循环迭代，直到证据足够。
           </p>
         </Reveal>
         <FlowOverview />

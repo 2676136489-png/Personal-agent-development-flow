@@ -8,7 +8,7 @@
 
 ![概览页](docs/images/overview-light.jpg)
 
-10 个模块均可用（概览 / 深度研究 / 研究规划 / 智能体 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程），后端 256 个测试通过。架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)，项目整体说明与关键设计取舍见 [`PROJECT.md`](PROJECT.md)。
+8 个模块均可用（概览 / 深度研究 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程），后端 256 个测试通过。架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)，项目整体说明与关键设计取舍见 [`PROJECT.md`](PROJECT.md)。
 
 ---
 
@@ -46,13 +46,9 @@ END
 |---|---|
 | ![深度研究](docs/images/research-workflow.jpg) | ![知识库](docs/images/knowledge-base.jpg) |
 
-| 智能体（深色） | 研究报告 |
+| RAG 流程 | 研究报告 |
 |---|---|
-| ![智能体](docs/images/agent-runner.jpg) | ![研究报告](docs/images/reports.jpg) |
-
-| RAG 流程 | 研究规划 |
-|---|---|
-| ![RAG 流程](docs/images/rag-lab.jpg) | ![研究规划](docs/images/research-planner.jpg) |
+| ![RAG 流程](docs/images/rag-lab.jpg) | ![研究报告](docs/images/reports.jpg) |
 
 界面是冷调深空蓝，浅色与深色两套主题，配色不靠肉眼定——每个前景/背景组合的对比度都先算再选值（浅底正文 ≥5.0:1，深底 ≥6.5:1）。主题色全部集中在 `styles/tokens.css`，业务 CSS 里只剩十来处渐变遮罩的技术性硬编码，换主题只改令牌。
 
@@ -76,7 +72,7 @@ backend/app/
 │   ├── run_store.py        agent_runs 表：产品视角的运行记录
 │   ├── plan_store.py       研究计划历史
 │   └── sources.py          工具输出 → 可展示的依据来源
-├── agent/                  智能体工作台：自主工具调用循环 + 运行历史
+├── agent/                  自主工具调用循环（选工具 → 执行 → 观察 → 作答）+ 运行历史
 ├── llm/                    统一模型调用层（多家 provider 可切换 + 自动兜底）
 ├── rag/                    解析 → 切块 → 向量 → 检索 → 存储（实验台在 lab.py）
 ├── search/                 搜索配额记账与额度决策
@@ -86,7 +82,7 @@ backend/app/
 └── tests/                  256 passed
 
 frontend/src/
-├── features/               10 个页面：概览 / 深度研究 / 研究规划 / 智能体 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程
+├── features/               8 个页面：概览 / 深度研究 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程
 ├── components/             通用组件（步骤条、时间线、证据面板、Toast…）
 ├── api/                    唯一 HTTP 出口（SSE 与轮询共用同一条数据链路）
 └── styles/                 设计令牌 + 分层样式
@@ -143,7 +139,7 @@ npm run dev                       # 127.0.0.1:5173
 | GET | `/api/graph/runs` | 历史运行列表 |
 | DELETE | `/api/graph/runs/{thread_id}` · `/api/graph/runs` | 删除一条 / 清空 |
 
-**智能体工作台**
+**智能体循环**
 
 | 方法 | 路径 | 作用 |
 |---|---|---|
@@ -151,7 +147,7 @@ npm run dev                       # 127.0.0.1:5173
 | GET | `/api/agent/runs` · `/api/agent/runs/{id}` | 历史列表（摘要）/ 单条完整结果 |
 | DELETE | `/api/agent/runs/{id}` | 删除一条历史 |
 
-**研究规划 · 知识库 · 设置 · 模型**
+**研究计划 · 知识库 · 设置 · 模型**
 
 | 方法 | 路径 | 作用 |
 |---|---|---|
@@ -203,7 +199,7 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 | 9 | 视觉与可读性 | `node scripts/probe-visual-theme.cjs <地址> ""` | 双主题令牌 / 渐变 / 玻璃层 / 字体加载断言全绿 |
 | 10 | 细节点与对比度 | `node scripts/probe-visual-zoom.cjs <地址> dark` | hover 态对比度 ≥4.5:1、网格落到像素 |
 | 11 | RAG 实验台 | `node scripts/probe-rag-page.cjs <地址>` | 四条横区按序堆叠、每区「选项在左 / 详情在右」、详情含官方文档链接、回显正确、五张图齐、色带段数=块卡片数、斜纹重叠>0、prompt 非空、无横向溢出 |
-| 12 | 文档截图 | `node scripts/docs-screenshots.cjs <地址>` | `docs/images/` 下 8 张首屏图，页面已渲染完（非骨架屏） |
+| 12 | 文档截图 | `node scripts/docs-screenshots.cjs <地址>` | `docs/images/` 下 6 张首屏图，页面已渲染完（非骨架屏） |
 
 配色不靠肉眼定：`tokens.css` 里每个前景/背景组合的对比度都是脚本实测的
 （浅底正文 ≥5.0:1，深底 ≥6.5:1）。第 9/10 项针对的是「改了样式但没真生效」——

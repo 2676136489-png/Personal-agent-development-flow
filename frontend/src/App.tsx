@@ -19,12 +19,6 @@ const Dashboard = lazy(() =>
 const ResearchWorkflow = lazy(() =>
   import('./features/workflow/ResearchWorkflow').then((m) => ({ default: m.ResearchWorkflow })),
 )
-const ResearchPlanner = lazy(() =>
-  import('./features/research/ResearchPlanner').then((m) => ({ default: m.ResearchPlanner })),
-)
-const AgentRunner = lazy(() =>
-  import('./features/agent/AgentRunner').then((m) => ({ default: m.AgentRunner })),
-)
 const KnowledgeBase = lazy(() =>
   import('./features/knowledge/KnowledgeBase').then((m) => ({ default: m.KnowledgeBase })),
 )
@@ -70,7 +64,7 @@ function usePrefetchPrimaryPage() {
 /* ===================== 导航数据结构（S1 / §2.1） ===================== */
 
 export type PageKey =
-  | 'dashboard' | 'workflow' | 'research' | 'agent' | 'knowledge' | 'rag'
+  | 'dashboard' | 'workflow' | 'knowledge' | 'rag'
   | 'reports' | 'evaluation' | 'settings' | 'tutorial'
 
 /** 视觉层级：家 / 主推 / 次（开发者向也用次） */
@@ -101,8 +95,6 @@ export const NAV_GROUPS: NavGroup[] = [
   ]},
   { id: 'research', label: '研究', items: [
     { key: 'workflow', label: '深度研究', tier: 'primary', recommend: true, hint: '推荐入口' },
-    { key: 'research', label: '研究规划', tier: 'secondary' },
-    { key: 'agent', label: '智能体', tier: 'secondary' },
     { key: 'knowledge', label: '知识库', tier: 'secondary' },
     { key: 'rag', label: 'RAG 流程', tier: 'secondary', hint: '可视化' },
   ]},
@@ -467,8 +459,6 @@ export default function App() {
               >
                 {page === 'dashboard' && <Dashboard onNavigate={navigate} />}
                 {page === 'workflow' && <ResearchWorkflow focusThread={focusThread} />}
-                {page === 'research' && <ResearchPlanner onNavigate={navigate} />}
-                {page === 'agent' && <AgentRunner />}
                 {page === 'knowledge' && <KnowledgeBase onNavigate={navigate} />}
                 {page === 'rag' && <RagLab />}
                 {page === 'tutorial' && <Tutorial onNavigate={navigate} />}

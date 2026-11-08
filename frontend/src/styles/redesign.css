@@ -1107,8 +1107,8 @@ p { line-height: var(--leading-relaxed); }
   text-anchor: middle;
 }
 
-/* 入口卡网格：主卡占 1.4 份，破掉"四张一样大"的默认感；
-   dense 让第 4 张次卡回填主卡右侧的空单元格，避免右下角留白 */
+/* 入口卡网格：主卡占 1.4 份，破掉"三张一样大"的默认感。
+   三张卡正好一行，不再让主卡跨两行 —— 跨行会空出右侧两格。 */
 .entry-grid {
   display: grid;
   grid-auto-flow: dense;
@@ -1116,11 +1116,9 @@ p { line-height: var(--leading-relaxed); }
   gap: var(--grid-gap);
 }
 
-.entry-grid > .card--primary { grid-row: span 2; }
-
 @media (max-width: 1023px) {
   .entry-grid { grid-template-columns: 1fr 1fr; }
-  .entry-grid > .card--primary { grid-column: span 2; grid-row: auto; }
+  .entry-grid > .card--primary { grid-column: span 2; }
   .hero-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .page-head__grid { grid-template-columns: 1fr; }
   .page-head::before { display: none; }

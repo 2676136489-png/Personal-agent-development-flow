@@ -82,23 +82,23 @@ try {
      注意：nav-link__badge / nav-link__hint 的前缀也含 `class="nav-link`，
      因此计数正则必须带后行断言 (?=[ "])，否则会把角标/说明一起数进来。 */
   const NAV_LINK = /class="nav-link(?=[ "])/g;
-  /** 顶栏横向菜单：含 core 项的组才渲染；system 组无 core 项 → 整组跳过 */
+  /** 顶栏横向菜单：分组全渲染，768–1023px 靠 CSS 隐藏非 core 组（data-core 供该断点用） */
   const menu = app.slice(app.indexOf('class="nav-menu"'), app.indexOf('class="nav-more"'));
-  expect('nav-menu 共 7 个导航项（9 项 − system 组 2 项）', count(menu, NAV_LINK) === 7);
+  expect('nav-menu 共 8 个导航项', count(menu, NAV_LINK) === 8);
   expect('顶栏 3 项标记 data-core="true"（概览/深度研究/研究报告）', count(menu, /data-core="true"/g) === 3);
-  expect('顶栏其余 4 项标记 data-core="false"', count(menu, /data-core="false"/g) === 4);
-  expect('顶栏渲染 3 个 nav-group 容器', count(menu, /class="nav-group"/g) === 3);
-  expect('nav-group 顺序为 home/research/results（system 已跳过）',
-    (menu.match(/data-group="[a-z]+"/g) || []).join(',') === 'data-group="home",data-group="research",data-group="results"');
+  expect('顶栏其余 5 项标记 data-core="false"', count(menu, /data-core="false"/g) === 5);
+  expect('顶栏渲染 4 个 nav-group 容器', count(menu, /class="nav-group"/g) === 4);
+  expect('nav-group 顺序为 home/research/results/system',
+    (menu.match(/data-group="[a-z]+"/g) || []).join(',') === 'data-group="home",data-group="research",data-group="results",data-group="system"');
   expect('主推项「深度研究」带「推荐」角标', menu.includes('深度研究') && count(menu, /class="nav-link__badge"/g) === 1);
   expect('开发者向项降级样式 nav-link--dev', menu.includes('效果评估') && count(menu, /nav-link--dev/g) === 1);
   expect('当前页带 aria-current="page"（语义而非仅 class）', count(menu, /aria-current="page"/g) === 1);
 
-  // 「更多」纯 CSS 下拉：3 个组标题 + 全部 9 项；role=menu 已降级为普通导航列表
+  // 「更多」纯 CSS 下拉：3 个组标题 + 全部 8 项；role=menu 已降级为普通导航列表
   const more = app.slice(app.indexOf('class="nav-more"'), app.indexOf('class="nav-actions"'));
   expect('nav-more 下拉存在', more.includes('nav-more__menu'));
   expect('nav-more 含 4 个组标题（含家组，下拉/抽屉为全量说明场景）', count(more, /class="nav-more__group"/g) === 4);
-  expect('nav-more 含 9 项 + 1 个触发按钮', count(more, NAV_LINK) === 10);
+  expect('nav-more 含 8 项 + 1 个触发按钮', count(more, NAV_LINK) === 9);
   expect('nav-more 已去除 role=menu/menuitem（无方向键实现即为 a11y 反模式）',
     !more.includes('role="menuitem"') && !more.includes('role="menu"') && more.includes('aria-label="更多导航"'));
 
@@ -122,13 +122,13 @@ try {
   expect('hero：状态点初始为检测中', dashMain.includes('正在检测后端…'));
 
   expect('入口卡：entry-grid 存在', dashMain.includes('class="entry-grid"'));
-  expect('入口卡：共 4 张 card--entry', count(dashMain, /card--entry/g) === 4);
+  expect('入口卡：共 3 张 card--entry', count(dashMain, /card--entry/g) === 3);
   expect('入口卡：恰 1 张主入口 card--primary', count(dashMain, /card--primary/g) === 1);
   expect('入口卡：主入口带「推荐」角标', dashMain.includes('>推荐<'));
-  expect('入口卡：4 张标题齐全（「研究工作流」已改名「深度研究」）',
-    ['深度研究', '智能体', '知识库', '研究报告'].every((t) => dashMain.includes(`class="card__title">${t}<`)));
+  expect('入口卡：3 张标题齐全（「研究工作流」已改名「深度研究」）',
+    ['深度研究', '知识库', '研究报告'].every((t) => dashMain.includes(`class="card__title">${t}<`)));
   expect('次级文字链 entry-links', dashMain.includes('class="entry-links"'));
-  expect('次级文字链含 4 项', ['研究规划', '效果评估', '系统设置', '教程'].every((t) => dashMain.includes(`>${t}</button>`)));
+  expect('次级文字链含 4 项', ['RAG 流程', '效果评估', '系统设置', '教程'].every((t) => dashMain.includes(`>${t}</button>`)));
 
   expect('区块③ 研究流程保留', dashMain.includes('七步流水线，每一步都看得见。'));
   expect('已移除「它能做什么」feature 区', !dashMain.includes('它能做什么'));
@@ -183,7 +183,7 @@ try {
   expect('S1：base.css 有全局 :focus-visible 焦点环', /:focus-visible \{[\s\S]{0,120}outline: 2px solid var\(--focus-outline\)/.test(baseCssEarly));
   expect('S1：base.css 有 focus-visible 变体（内嵌描边防裁切）',
     /\.collapsible-card__header:focus-visible,\s*\.modal__head :focus-visible,\s*\.nav-drawer__head :focus-visible \{[^}]*outline-offset: -3px/.test(baseCssEarly));
-  expect('S1：抽屉按 NAV_GROUPS 渲染分组（9 项全进，家组也出标签）',
+  expect('S1：抽屉按 NAV_GROUPS 渲染分组（8 项全进，家组也出标签）',
     count(appSrc, /className="nav-drawer__group"/g) === 1 &&
     count(appSrc, /className="nav-drawer__label"/g) === 1 &&
     /DRAWER_GROUP_LABEL: Partial<Record<NavGroup\['id'\], string>> = \{ home: '概览' \}/.test(appSrc));
@@ -191,8 +191,6 @@ try {
 
   /* ============ T07：workflow / research / agent「主操作优先」 ============ */
   const { ResearchWorkflow } = await server.ssrLoadModule('/src/features/workflow/ResearchWorkflow.tsx');
-  const { ResearchPlanner } = await server.ssrLoadModule('/src/features/research/ResearchPlanner.tsx');
-  const { AgentRunner } = await server.ssrLoadModule('/src/features/agent/AgentRunner.tsx');
 
   const ordered = (html, ...needles) => {
     let last = -1;
@@ -206,8 +204,6 @@ try {
 
   const pages = [
     ['workflow', ResearchWorkflow],
-    ['research', ResearchPlanner],
-    ['agent', AgentRunner],
   ];
   for (const [name, Comp] of pages) {
     const html = renderToStaticMarkup(React.createElement(Comp));
@@ -249,12 +245,6 @@ try {
   expect('OBS-1：迟到 onOpen 位于回放 eventCache 之后', /eventCache\.get\(threadId\)[\s\S]{0,220}?readyState === EventSource\.OPEN/.test(evtSource));
   expect('OBS-1：未调整 subscribe 顺序（先 addListener 回放 → 再 attach 建连）', /addListener\(threadId[\s\S]{0,400}?attach\(threadId\)/.test(evtSource));
   expect('OBS-1：连接/缓存机制未改（sources/eventCache/closeStream/switchStream 保留）', /const sources = new Map<string, EventSource>\(\)/.test(evtSource) && /const eventCache = new Map<string, RunEvent\[\]>\(\)/.test(evtSource) && /function closeStream/.test(evtSource) && /function switchStream/.test(evtSource));
-
-  const agHtml = renderToStaticMarkup(React.createElement(AgentRunner));
-  expect('T07 agent：placeholder 用稿', agHtml.includes('例如：向量数据库有哪些主流选择？各自适用场景是什么？'));
-  expect('T07 agent：tip 文案', agHtml.includes('Agent 会自己决定搜索与抓取'));
-  const agSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/features/agent/AgentRunner.tsx'), 'utf8');
-  expect('T07 agent：FINISH_REASON_LABEL 映射未被改动', ['final_answer', 'max_steps_reached', 'timeout', 'llm_error'].every((k) => agSrc.includes(k)));
 
   /* ============ T08：状态补齐 + 缺陷修复 + 响应式收尾 ============ */
   const load = (rel) => server.ssrLoadModule(rel);
@@ -432,9 +422,7 @@ try {
   expect('T03 B2：.fold__summary::before 已关掉字符箭头',
     /\.fold__summary::before \{\s*content: none;/.test(layoutCss));
   expect('T03 B2：.fold__summary 内联 ChevronRightIcon（DOM 侧）',
-    [fs.readFileSync(path.resolve(process.cwd(), 'src/features/agent/AgentRunner.tsx'), 'utf8'),
-      fs.readFileSync(path.resolve(process.cwd(), 'src/features/research/ResearchPlanner.tsx'), 'utf8'),
-      fs.readFileSync(path.resolve(process.cwd(), 'src/features/workflow/ResearchWorkflow.tsx'), 'utf8')]
+    [fs.readFileSync(path.resolve(process.cwd(), 'src/features/workflow/ResearchWorkflow.tsx'), 'utf8')]
       .every((s) => /<ChevronRightIcon size=\{14\} \/>/.test(s)) &&
     /\.fold\[open\] \.fold__summary > svg \{[^}]*transform: rotate\(90deg\);/.test(layoutCss));
   expect('T03 B2：.tool-call-card__tool::before 已关掉 ⚡',
@@ -520,11 +508,11 @@ try {
 
   /* ---- 渲染层：图标确实出现在 HTML 里 ---- */
   const dashIcons = count(dashMain, /class="card__icon"><svg/g);
-  expect('T03 B4：Dashboard 4 张入口卡各渲染 1 个 svg 图标', dashIcons === 4);
+  expect('T03 B4：Dashboard 3 张入口卡各渲染 1 个 svg 图标', dashIcons === 3);
   const { Tutorial } = await server.ssrLoadModule('/src/features/tutorial/Tutorial.tsx');
   const tutorial = renderToStaticMarkup(React.createElement(Tutorial, { onNavigate: () => {} }));
-  expect('T03 B4：Tutorial 10 个模块各渲染 1 个 svg 图标',
-    count(tutorial, /class="module__icon"><svg/g) === 10);
+  expect('T03 B4：Tutorial 8 个模块各渲染 1 个 svg 图标',
+    count(tutorial, /class="module__icon"><svg/g) === 8);
 
   /* =========================================================================
      [T10] 阶段顺序契约（前端侧）—— 与后端 tests/test_graph.py 的
