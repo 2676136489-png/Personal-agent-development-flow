@@ -2,7 +2,18 @@ import { Reveal } from '../../components/Reveal'
 import { PageHeader } from '../../components/PageHeader'
 import { SectionNav } from '../../components/SectionNav'
 import { Stagger, StaggerItem } from '../../components/Stagger'
-import { BeakerIcon, BotIcon, BookIcon, ClipboardIcon, FlaskIcon, GraduationIcon, HomeIcon } from '../../components/icons'
+import {
+  BarChartIcon,
+  BeakerIcon,
+  BotIcon,
+  BookIcon,
+  ClipboardIcon,
+  DocIcon,
+  FlaskIcon,
+  GraduationIcon,
+  HomeIcon,
+  SlidersIcon,
+} from '../../components/icons'
 import type { IconProps } from '../../components/icons'
 import type { ComponentType } from 'react'
 
@@ -61,6 +72,27 @@ const MODULES: Module[] = [
     scenario: '想拿到一份结构化、有出处、可中断把关的研究报告。',
     interaction:
       '输入问题 → 开始 → 实时事件流 → 在「待确认」中断点查看草稿并确认 / 修改 → 获取最终报告。支持后台持续运行，可切到其他模块同步查看。',
+  },
+  {
+    icon: DocIcon,
+    name: '研究报告',
+    role: '把跑完的研究归档：摘要、分节正文、局限说明与引用来源都在一处，点开就能读。',
+    scenario: '想回看某次研究的结论，或把带出处的正文整理成可分享的材料。',
+    interaction: '在左侧列表选中一条 → 右侧展开全文 → 引用来源可点开原始链接核对。',
+  },
+  {
+    icon: BarChartIcon,
+    name: '效果评估',
+    role: '统计深度研究的运行情况：成功率、耗时分布、token 消耗与失败原因，用来判断这套流程稳不稳、慢在哪。',
+    scenario: '想量化「这套配置到底靠不靠谱」，或定位某个节点为什么失败。',
+    interaction: '先看成功率与耗时分布，再看失败原因归类，对着慢或错的节点回去调参。',
+  },
+  {
+    icon: SlidersIcon,
+    name: '系统设置',
+    role: '后端连通性自检、模型与搜索配置、运行参数与依赖状态；敏感字段只显示是否已配置，不显示明文。',
+    scenario: '换了 Key、换了模型，或想确认「现在连的是谁、额度还剩多少」。',
+    interaction: '先看模型自检结果，再看「访问与额度」；改配置要改后端 .env 并重启，页面上不能直接写。',
   },
   {
     icon: GraduationIcon,
@@ -143,7 +175,7 @@ export function Tutorial({ onNavigate }: { onNavigate?: NavigateFn }) {
               <p className="eyebrow">功能模块</p>
               <h2>每个模块解决什么问题？</h2>
               <p className="section-lede">
-                平台由「概览 / 研究规划 / 智能体 / 知识库 / RAG 流程 / 深度研究 / 研究报告 / 效果评估 / 系统设置」组成，各司其职、可单独使用，也可串成完整研究链路。
+                平台共 10 个页面：概览 / 研究规划 / 智能体 / 知识库 / RAG 流程 / 深度研究 / 研究报告 / 效果评估 / 系统设置 / 使用教程，各司其职、可单独使用，也可串成完整研究链路。
               </p>
             </Reveal>
 

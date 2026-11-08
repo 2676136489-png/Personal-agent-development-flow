@@ -523,8 +523,8 @@ try {
   expect('T03 B4：Dashboard 4 张入口卡各渲染 1 个 svg 图标', dashIcons === 4);
   const { Tutorial } = await server.ssrLoadModule('/src/features/tutorial/Tutorial.tsx');
   const tutorial = renderToStaticMarkup(React.createElement(Tutorial, { onNavigate: () => {} }));
-  expect('T03 B4：Tutorial 6 个模块各渲染 1 个 svg 图标',
-    count(tutorial, /class="module__icon"><svg/g) === 6);
+  expect('T03 B4：Tutorial 10 个模块各渲染 1 个 svg 图标',
+    count(tutorial, /class="module__icon"><svg/g) === 10);
 
   /* =========================================================================
      [T10] 阶段顺序契约（前端侧）—— 与后端 tests/test_graph.py 的

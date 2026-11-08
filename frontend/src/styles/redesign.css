@@ -482,7 +482,6 @@ p { line-height: var(--leading-relaxed); }
   width: 2px;
   background: var(--grad-brand);
   border-radius: 2px;
-  box-shadow: var(--glow-cyan);
 }
 
 .page-head__title {
@@ -1234,14 +1233,27 @@ p { line-height: var(--leading-relaxed); }
 
 /* [B32] 显式钉死列位置，不依赖 DOM 顺序：
    曾经 SectionNav 写在 doc-layout__main 前面，被自动放进 1fr 宽列、
-   正文被塞进 220px 窄列 —— 整页排版崩坏（标题竖排、卡片挤压）。 */
+   正文被塞进 220px 窄列 —— 整页排版崩坏（标题竖排、卡片挤压）。
+
+   行也必须一起钉死：DOM 里 SectionNav 在前，只写 grid-column 时自动排布
+   会把它放进第 1 行右侧，正文作为「不能回退」的后继项被挤到第 2 行 ——
+   表现为目录孤零零浮在右上、正文上方空出一整条（含一个 row-gap 和目录高度），
+   第 2 行右侧同时也空着。两栏都写 grid-row: 1 才是并排。 */
 .doc-layout__main {
   grid-column: 1;
+  grid-row: 1;
   min-width: 0;
 }
 
 .doc-layout .section-nav {
   grid-column: 2;
+  grid-row: 1;
+}
+
+/* 首节不再叠 margin-top：hero 与正文之间已经有 shell 的间距，
+   section 自身还有 padding-top，三者相加会在标题上方留出一大片空白。 */
+.doc-layout__main > .section:first-child {
+  margin-top: 0;
 }
 
 .section-nav {
