@@ -173,6 +173,50 @@ export function RagLab() {
     [options, embedderId],
   )
 
+  /* 底部回显：四步各选了什么，用一句话说清，不用回头再翻上面的选项 */
+  const chosenDocument = documents.find((doc) => doc.id === documentId)
+  const corpusLabel =
+    corpusKind === 'document'
+      ? (chosenDocument?.filename ?? '未选择文档')
+      : `粘贴文本 · ${text.trim().length.toLocaleString()} 字`
+  const chunkLabel = `${activeChunker?.label ?? chunking.strategy} · ${chunking.chunk_size} 字${
+    activeChunker?.params.includes('overlap') ? ` / 重叠 ${chunking.overlap}` : ''
+  }`
+  const embedLabel = `${activeEmbedder?.model ?? '—'}${
+    activeEmbedder?.dims ? ` · ${activeEmbedder.dims} 维` : ''
+  }`
+  const retrievalLabel = `${activeRetriever?.label ?? retrieval.method} · top ${retrieval.top_k}`
+
+  /* 第 1 列底部的语料体检：粘贴文本时按当前切块参数估一个块数，
+     选文档时直接用库里的元数据。四列等高，这一块也顺手把左列的空档填上。 */
+  const corpusFacts =
+    corpusKind === 'document'
+      ? [
+          { label: '已切片', value: chosenDocument ? `${chosenDocument.chunk_count} 块` : '—' },
+          {
+            label: '文件大小',
+            value: chosenDocument
+              ? `${Math.max(1, Math.round(chosenDocument.size_bytes / 1024))} KB`
+              : '—',
+          },
+          {
+            label: '向量模型',
+            /* 库里的 id 形如 bigmodel:embedding-3，格子窄，只留模型名 */
+            value: chosenDocument?.embedding_model?.split(':').pop() ?? '未向量化',
+          },
+        ]
+      : (() => {
+          const chars = text.trim().length
+          const paras = text.split(/\n{2,}/).filter((part) => part.trim().length > 0).length
+          const step = Math.max(1, chunking.chunk_size - chunking.overlap)
+          const chunks = chars === 0 ? 0 : Math.max(1, Math.ceil((chars - chunking.overlap) / step))
+          return [
+            { label: '字符', value: chars.toLocaleString() },
+            { label: '段落', value: String(paras) },
+            { label: '预计块', value: `约 ${chunks}` },
+          ]
+        })()
+
   const handleRun = useCallback(async () => {
     if (query.trim().length < 2) {
       setRunError('先写一个至少 2 个字的问题')
@@ -241,206 +285,237 @@ export function RagLab() {
         title="把 RAG 的五步摊开看"
         lede="选一套方法，跑一遍真实的 RAG：解析、切块、向量化、检索、组装上下文。每一步的中间结果都摊在下面，包括切块边界、向量热力图和两种召回各自的排名。"
         notes={[
-          { term: '怎么用', desc: '挑语料 → 写问题 → 依次选切块 / 向量 / 检索方法 → 开始 RAG。' },
+          { term: '怎么用', desc: '按 ①②③④ 依次选好方法 → 下面确认一遍 → 开始 RAG。' },
           { term: '看什么', desc: '重点看「同一份材料换一种切法」和「BM25 与向量的排名差在哪里」。' },
           { term: '注意', desc: '这里只做演示，不写入知识库；写库请用知识库页面的上传。' },
         ]}
-        actions={
+      />
+
+      <div className="rag-flow" aria-label="RAG 方法配置">
+        <StepColumn step="1" title="语料" desc="喂给 RAG 的材料">
+          <div className="rag-switch" role="tablist" aria-label="语料来源">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={corpusKind === 'text'}
+              className="rag-switch__btn"
+              data-active={corpusKind === 'text'}
+              onClick={() => setCorpusKind('text')}
+            >
+              粘贴文本
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={corpusKind === 'document'}
+              className="rag-switch__btn"
+              data-active={corpusKind === 'document'}
+              onClick={() => setCorpusKind('document')}
+            >
+              知识库（{documents.length}）
+            </button>
+          </div>
+
+          {corpusKind === 'text' ? (
+            <>
+              <textarea
+                className="input rag-textarea"
+                rows={8}
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder="粘贴一段要检索的中文材料…"
+              />
+              <div className="rag-inline">
+                <span className="hint">{text.length.toLocaleString()} 字</span>
+                <button type="button" className="rag-linkbtn" onClick={() => setText(SAMPLE_TEXT)}>
+                  恢复示例
+                </button>
+              </div>
+            </>
+          ) : documents.length === 0 ? (
+            <p className="hint">知识库还是空的。先去「知识库」页上传一份文档，再回来选它。</p>
+          ) : (
+            <label className="field">
+              <span className="field__label">选择文档</span>
+              <select
+                className="input"
+                value={documentId}
+                onChange={(event) => setDocumentId(event.target.value)}
+              >
+                <option value="">请选择…</option>
+                {documents.map((doc) => (
+                  <option key={doc.id} value={doc.id}>
+                    {doc.filename}（{doc.chunk_count} 块）
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <div className="rag-corpus">
+            <div className="rag-corpus__grid">
+              {corpusFacts.map((item) => (
+                <div className="rag-corpus__cell" key={item.label}>
+                  <span className="rag-corpus__value">{item.value}</span>
+                  <span className="rag-corpus__label">{item.label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="rag-corpus__note">
+              {corpusKind === 'document'
+                ? '块按库里的切片走；想换切法，用左边「粘贴文本」跑一遍对比。'
+                : `块数按 ${chunking.chunk_size} 字 / 重叠 ${chunking.overlap} 估算，实际以运行结果为准。`}
+            </p>
+          </div>
+
+          <label className="field">
+            <span className="field__label">要检索的问题</span>
+            <input
+              className="input"
+              value={query}
+              maxLength={200}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="例如：向量检索召回率怎么提升"
+            />
+          </label>
+        </StepColumn>
+
+        <StepColumn step="2" title="切块" desc="决定检索的最小单位">
+          <MethodPicker
+            options={options.chunkers}
+            value={chunking.strategy}
+            onChange={(id) => setChunking((prev) => ({ ...prev, strategy: id }))}
+            note={
+              activeChunker?.needs_embedding
+                ? '这一步会先调用向量模型算句向量，耗时比其他切法高。'
+                : undefined
+            }
+          />
+          {activeChunker && <p className="rag-bestfor">适合：{activeChunker.best_for}</p>}
+          <div className="rag-params">
+            {(activeChunker?.params ?? []).map((name) => (
+              <ParamField
+                key={name}
+                def={options.params[name]}
+                value={chunking[name as keyof ChunkSettings] as number | boolean}
+                onChange={(value) =>
+                  setChunking((prev) => ({ ...prev, [name]: value }) as ChunkSettings)
+                }
+              />
+            ))}
+          </div>
+        </StepColumn>
+
+        <StepColumn step="3" title="向量化" desc="把块变成向量">
+          <div className="rag-embedders">
+            {options.embedders.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="rag-embedder"
+                data-active={embedderId === item.id}
+                disabled={!item.available}
+                onClick={() => setEmbedderId(item.id)}
+              >
+                <span className="rag-embedder__label">{item.label}</span>
+                <span className="rag-embedder__meta">
+                  {/* label 里已经带了模型名就不再重复，只留维度 */}
+                  {[
+                    item.label.includes(item.model) ? null : item.model,
+                    item.dims ? `${item.dims} 维` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+                <span className="rag-embedder__tags">
+                  <em data-kind={item.semantic ? 'semantic' : 'literal'}>
+                    {item.semantic ? '语义' : '仅字面'}
+                  </em>
+                  {!item.available && <em data-kind="off">不可用</em>}
+                </span>
+                {item.note && <span className="rag-embedder__note">{item.note}</span>}
+              </button>
+            ))}
+          </div>
+
+          <dl className="rag-facts">
+            <div className="rag-facts__row">
+              <dt>维度</dt>
+              <dd>{activeEmbedder?.dims ? `${activeEmbedder.dims} 维` : '—'}</dd>
+            </div>
+            <div className="rag-facts__row">
+              <dt>相似度</dt>
+              <dd>余弦 · 归一化</dd>
+            </div>
+            <div className="rag-facts__row">
+              <dt>换后端</dt>
+              <dd>旧向量退出</dd>
+            </div>
+          </dl>
+
+          <p className="rag-note">
+            语义切分也调这个模型找断点，所以换后端会连带改变切法；一步里只算一遍，块越多越慢。
+          </p>
+        </StepColumn>
+
+        <StepColumn step="4" title="检索" desc="从所有块里挑出这几条">
+          <MethodPicker
+            options={options.retrievers}
+            value={retrieval.method}
+            onChange={(id) => setRetrieval((prev) => ({ ...prev, method: id }))}
+          />
+          {activeRetriever && <p className="rag-bestfor">适合：{activeRetriever.best_for}</p>}
+          <div className="rag-params">
+            {(activeRetriever?.params ?? []).map((name) => (
+              <ParamField
+                key={name}
+                def={options.params[name]}
+                value={retrieval[name as keyof RetrievalSettings] as number | boolean}
+                onChange={(value) =>
+                  setRetrieval((prev) => ({ ...prev, [name]: value }) as RetrievalSettings)
+                }
+              />
+            ))}
+          </div>
+        </StepColumn>
+      </div>
+
+      <div className="rag-recap">
+        <div className="rag-recap__items">
+          <RecapItem step="1" label="语料" value={corpusLabel} />
+          <RecapItem step="2" label="切块" value={chunkLabel} />
+          <RecapItem step="3" label="向量" value={embedLabel} />
+          <RecapItem step="4" label="检索" value={retrievalLabel} />
+        </div>
+        <div className="rag-recap__run">
           <button
             type="button"
-            className="button button--primary"
+            className="button button--primary rag-run__btn"
             disabled={running}
             onClick={() => void handleRun()}
           >
-            {running ? '正在跑…' : '开始 RAG'}
+            {running ? '正在跑整条链路…' : '开始 RAG'}
           </button>
-        }
-      />
-
-      <div className="rag-layout">
-        <aside className="rag-config" aria-label="RAG 方法配置">
-          <div className="rag-config__scroll">
-            <ConfigCard step="1" title="语料" desc="从知识库挑一份，或者直接粘一段文本。">
-              <div className="rag-switch" role="tablist" aria-label="语料来源">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={corpusKind === 'text'}
-                  className="rag-switch__btn"
-                  data-active={corpusKind === 'text'}
-                  onClick={() => setCorpusKind('text')}
-                >
-                  粘贴文本
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={corpusKind === 'document'}
-                  className="rag-switch__btn"
-                  data-active={corpusKind === 'document'}
-                  onClick={() => setCorpusKind('document')}
-                >
-                  知识库文档（{documents.length}）
-                </button>
-              </div>
-
-              {corpusKind === 'text' ? (
-                <>
-                  <textarea
-                    className="input rag-textarea"
-                    rows={7}
-                    value={text}
-                    onChange={(event) => setText(event.target.value)}
-                    placeholder="粘贴一段要检索的中文材料…"
-                  />
-                  <div className="rag-inline">
-                    <span className="hint">{text.length.toLocaleString()} 字</span>
-                    <button type="button" className="rag-linkbtn" onClick={() => setText(SAMPLE_TEXT)}>
-                      恢复示例
-                    </button>
-                  </div>
-                </>
-              ) : documents.length === 0 ? (
-                <p className="hint">
-                  知识库还是空的。先去「知识库」页上传一份 PDF / Markdown / TXT，再回来选它。
-                </p>
-              ) : (
-                <label className="field">
-                  <span className="field__label">选择文档</span>
-                  <select
-                    className="input"
-                    value={documentId}
-                    onChange={(event) => setDocumentId(event.target.value)}
-                  >
-                    <option value="">请选择…</option>
-                    {documents.map((doc) => (
-                      <option key={doc.id} value={doc.id}>
-                        {doc.filename}（{doc.chunk_count} 块 · {doc.embedding_model ?? '未向量化'}）
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
-              <label className="field">
-                <span className="field__label">要检索的问题</span>
-                <input
-                  className="input"
-                  value={query}
-                  maxLength={200}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="例如：向量检索召回率怎么提升"
-                />
-              </label>
-            </ConfigCard>
-
-            <ConfigCard step="2" title="切块" desc="决定检索的最小单位。">
-              <MethodPicker
-                options={options.chunkers}
-                value={chunking.strategy}
-                onChange={(id) => setChunking((prev) => ({ ...prev, strategy: id }))}
-                note={
-                  activeChunker?.needs_embedding
-                    ? '这一步会先调用向量模型算句向量，耗时与费用都比其他切法高。'
-                    : undefined
-                }
-              />
-              {activeChunker && (
-                <p className="rag-bestfor">适合：{activeChunker.best_for}</p>
-              )}
-              <div className="rag-params">
-                {(activeChunker?.params ?? []).map((name) => (
-                  <ParamField
-                    key={name}
-                    def={options.params[name]}
-                    value={chunking[name as keyof ChunkSettings] as number | boolean}
-                    onChange={(value) =>
-                      setChunking((prev) => ({ ...prev, [name]: value }) as ChunkSettings)
-                    }
-                  />
-                ))}
-              </div>
-            </ConfigCard>
-
-            <ConfigCard step="3" title="向量化" desc="检索用的向量由谁生成。">
-              <div className="rag-embedders">
-                {options.embedders.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="rag-embedder"
-                    data-active={embedderId === item.id}
-                    disabled={!item.available}
-                    onClick={() => setEmbedderId(item.id)}
-                  >
-                    <span className="rag-embedder__label">{item.label}</span>
-                    <span className="rag-embedder__meta">
-                      {item.model}
-                      {item.dims ? ` · ${item.dims} 维` : ''}
-                      {item.semantic ? ' · 语义' : ' · 仅字面'}
-                    </span>
-                    {!item.available && <span className="rag-embedder__badge">不可用</span>}
-                  </button>
-                ))}
-              </div>
-              {activeEmbedder && <p className="rag-bestfor">{activeEmbedder.note}</p>}
-            </ConfigCard>
-
-            <ConfigCard step="4" title="检索" desc="怎么从所有块里挑出这几条。">
-              <MethodPicker
-                options={options.retrievers}
-                value={retrieval.method}
-                onChange={(id) => setRetrieval((prev) => ({ ...prev, method: id }))}
-              />
-              {activeRetriever && <p className="rag-bestfor">适合：{activeRetriever.best_for}</p>}
-              <div className="rag-params">
-                {(activeRetriever?.params ?? []).map((name) => (
-                  <ParamField
-                    key={name}
-                    def={options.params[name]}
-                    value={retrieval[name as keyof RetrievalSettings] as number | boolean}
-                    onChange={(value) =>
-                      setRetrieval((prev) => ({ ...prev, [name]: value }) as RetrievalSettings)
-                    }
-                  />
-                ))}
-              </div>
-            </ConfigCard>
-          </div>
-
-          <div className="rag-run">
-            <button
-              type="button"
-              className="button button--primary rag-run__btn"
-              disabled={running}
-              onClick={() => void handleRun()}
-            >
-              {running ? '正在跑整条链路…' : '开始 RAG'}
-            </button>
-            <p className="hint">
-              会真实调用向量模型：块越多、切法越依赖语义，耗时越长。
-            </p>
-            {runError && (
-              <div className="alert alert--error rag-alert">{runError}</div>
-            )}
-          </div>
-        </aside>
-
-        <div className="rag-results" ref={resultsRef}>
-          {!result ? (
-            <EmptyState
-              title="还没有运行结果"
-              description="左边选好方法，点「开始 RAG」，这里会按顺序摊开五步的真实产物：切块边界、向量、排名与最终上下文。"
-            />
-          ) : (
-            <ResultView
-              result={result}
-              options={options}
-              focusChunk={focusChunk}
-              onFocus={setFocusChunk}
-            />
-          )}
+          <p className="hint">真实调用向量模型，块越多越慢</p>
         </div>
+      </div>
+
+      {runError && <div className="alert alert--error rag-alert">{runError}</div>}
+
+      <div className="rag-results" ref={resultsRef}>
+        {!result ? (
+          <EmptyState
+            title="还没有运行结果"
+            description="上面四步选好方法，点「开始 RAG」，这里会按顺序摊开五步的真实产物：切块边界、向量、排名与最终上下文。"
+          />
+        ) : (
+          <ResultView
+            result={result}
+            options={options}
+            focusChunk={focusChunk}
+            onFocus={setFocusChunk}
+          />
+        )}
       </div>
     </section>
   )
@@ -676,7 +751,7 @@ function ResultView({
 
 /* --------------------------------------------------------------- 小组件 */
 
-function ConfigCard({
+function StepColumn({
   step,
   title,
   desc,
@@ -691,7 +766,7 @@ function ConfigCard({
     <section className="rag-step">
       <header className="rag-step__head">
         <span className="rag-step__no">{step}</span>
-        <div>
+        <div className="rag-step__heading">
           <h3 className="rag-step__title">{title}</h3>
           <p className="rag-step__desc">{desc}</p>
         </div>
@@ -701,6 +776,21 @@ function ConfigCard({
   )
 }
 
+/** 底部回显的一项：第几步 + 选了什么 */
+function RecapItem({ step, label, value }: { step: string; label: string; value: string }) {
+  return (
+    <div className="rag-recap__item">
+      <span className="rag-recap__label">
+        {step} · {label}
+      </span>
+      <span className="rag-recap__value" title={value}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+/** 方法选择：一行一个，选中后只在下方展开这一个方法的说明与出处 */
 function MethodPicker({
   options,
   value,
@@ -712,31 +802,37 @@ function MethodPicker({
   onChange: (id: string) => void
   note?: string
 }) {
+  const active = options.find((item) => item.id === value)
   return (
     <>
-      <div className="rag-methods">
+      <div className="rag-methods" role="radiogroup">
         {options.map((item) => (
           <button
             key={item.id}
             type="button"
+            role="radio"
+            aria-checked={value === item.id}
             className="rag-method"
             data-active={value === item.id}
             onClick={() => onChange(item.id)}
           >
             <span className="rag-method__label">{item.label}</span>
-            <span className="rag-method__summary">{item.summary}</span>
-            <a
-              className="rag-method__doc"
-              href={item.doc_url}
-              target="_blank"
-              rel="noreferrer noopener"
-              onClick={(event) => event.stopPropagation()}
-            >
-              {item.doc_label} ↗
-            </a>
           </button>
         ))}
       </div>
+      {active && (
+        <div className="rag-method-detail">
+          <p className="rag-method-detail__text">{active.summary}</p>
+          <a
+            className="rag-method-detail__doc"
+            href={active.doc_url}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            {active.doc_label} ↗
+          </a>
+        </div>
+      )}
       {note && <p className="rag-figure__note">{note}</p>}
     </>
   )

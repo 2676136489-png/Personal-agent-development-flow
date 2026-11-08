@@ -202,7 +202,7 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 | 8 | 布局与跳转 | `frontend/scripts/` 下的 CDP 探针脚本 | 元素几何 / 跳转落地状态符合断言 |
 | 9 | 视觉与可读性 | `node scripts/probe-visual-theme.cjs <地址> ""` | 双主题令牌 / 渐变 / 玻璃层 / 字体加载断言全绿 |
 | 10 | 细节点与对比度 | `node scripts/probe-visual-zoom.cjs <地址> dark` | hover 态对比度 ≥4.5:1、网格落到像素 |
-| 11 | RAG 实验台 | `node scripts/probe-rag-page.cjs <地址>` | 五张图齐、色带段数=块卡片数、斜纹重叠>0、prompt 非空、无横向溢出 |
+| 11 | RAG 实验台 | `node scripts/probe-rag-page.cjs <地址>` | 四步顺序与回显正确、五张图齐、色带段数=块卡片数、斜纹重叠>0、prompt 非空、无横向溢出 |
 | 12 | 文档截图 | `node scripts/docs-screenshots.cjs <地址>` | `docs/images/` 下 8 张首屏图，页面已渲染完（非骨架屏） |
 
 配色不靠肉眼定：`tokens.css` 里每个前景/背景组合的对比度都是脚本实测的

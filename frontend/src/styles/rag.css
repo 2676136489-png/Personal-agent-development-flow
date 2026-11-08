@@ -9,91 +9,74 @@
   min-height: 60vh;
 }
 
-.rag-layout {
+/* 四步横向流程：一条横带里依次 1 语料 → 2 切块 → 3 向量化 → 4 检索。
+   原来是 320px 左栏 + 一大片空的结果区，选项挤成一根竖线，选完还得滚回去核对；
+   摊成横带之后四步的关系一眼可见，参数也放得下。
+   面本身就是一块工作台：只靠 1px 边框和底色分层，不加投影 —— 卡片浮起来会更像营销页。 */
+.rag-flow {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: var(--space-6);
-  align-items: start;
-  margin-top: var(--space-6);
-}
-
-/* 配置栏 = 「可滚动的方法卡」+「固定可见的运行按钮」两行。
-   之前把运行按钮也塞进滚动区，滚到中间时按钮会盖住下面那张方法卡；
-   拆成两行之后按钮始终在栏底，不会遮挡任何内容。 */
-.rag-config {
-  position: sticky;
-  top: 84px;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: var(--space-4);
-  max-height: calc(100vh - 108px);
-}
-
-.rag-config__scroll {
-  display: grid;
-  gap: var(--space-4);
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.rag-config__scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.rag-config__scroll::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
-  border-radius: var(--radius-pill);
-}
-
-/* ---- 配置卡 ---- */
-
-.rag-step {
+  grid-template-columns: 1.3fr 1.05fr 0.95fr 1.1fr;
+  margin-top: var(--space-5);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.rag-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.rag-step + .rag-step {
+  border-left: 1px solid var(--line);
 }
 
 .rag-step__head {
-  display: flex;
-  gap: var(--space-3);
-  align-items: flex-start;
-  padding: var(--space-4) var(--space-4) var(--space-2);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  /* 裸序号按基线对齐，才和标题首行坐在同一条线上 */
+  align-items: baseline;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
 }
 
+/* 步号不用色块：加边框的方块读起来像控件，裸的等宽序号才是「第几步」 */
 .rag-step__no {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-xs);
-  background: var(--accent-tint-strong);
-  color: var(--accent-ink);
+  min-width: 18px;
+  color: var(--faint);
   font-family: var(--mono);
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.rag-step__heading {
+  min-width: 0;
 }
 
 .rag-step__title {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 650;
   color: var(--ink);
 }
 
 .rag-step__desc {
-  margin: 2px 0 0;
-  font-size: 0.76rem;
-  color: var(--muted);
-  line-height: 1.5;
+  margin: 1px 0 0;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--faint);
 }
 
 .rag-step__body {
   display: grid;
   gap: var(--space-3);
-  padding: 0 var(--space-4) var(--space-4);
+  align-content: start;
 }
 
 /* ---- 语料切换 ---- */
@@ -121,7 +104,6 @@
 .rag-switch__btn[data-active='true'] {
   background: var(--surface);
   color: var(--ink);
-  box-shadow: var(--shadow-xs);
 }
 
 .rag-textarea {
@@ -149,56 +131,145 @@
   text-underline-offset: 2px;
 }
 
+/* ---- 语料体检 ---- */
+
+/* 三个小格：字符/段落/预计块（文档模式换成库里的元数据）。
+   1px 间隙露出底色当分隔线，比给每格加 border 干净。 */
+.rag-corpus {
+  display: grid;
+  gap: 6px;
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--line-strong);
+}
+
+.rag-corpus__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  border-radius: var(--radius-sm);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.rag-corpus__cell {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  background: var(--surface-alt);
+}
+
+.rag-corpus__value {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rag-corpus__label {
+  font-size: 0.64rem;
+  color: var(--faint);
+}
+
+.rag-corpus__note {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
 /* ---- 方法选择 ---- */
 
+/* 方法选择：一行一个单选行，说明只在选中后展开。
+   五个方法各带两三行摘要时，光选项就要滚两屏，选了什么反而看不清。 */
 .rag-methods {
   display: grid;
-  gap: var(--space-2);
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
 }
 
 .rag-method {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
   text-align: left;
-  padding: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
   cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.rag-method::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
   transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 
 .rag-method:hover {
-  border-color: var(--accent-border);
-  background: var(--accent-tint);
-}
-
-.rag-method[data-active='true'] {
-  border-color: var(--accent);
-  background: var(--accent-tint);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
-.rag-method__label {
-  font-size: 0.82rem;
-  font-weight: 600;
+  background: var(--surface);
   color: var(--ink);
 }
 
-.rag-method__summary {
-  font-size: 0.74rem;
-  line-height: 1.55;
+.rag-method[data-active='true'] {
+  background: var(--surface);
+  border-color: var(--accent-border);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.rag-method[data-active='true']::before {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-tint-strong);
+}
+
+.rag-method__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rag-method-detail {
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+}
+
+.rag-method-detail__text {
+  margin: 0;
+  font-size: 0.71rem;
+  line-height: 1.6;
   color: var(--muted);
 }
 
-.rag-method__doc {
-  font-size: 0.7rem;
+.rag-method-detail__doc {
+  font-family: var(--mono);
+  font-size: 0.65rem;
   color: var(--accent-ink);
   text-decoration: none;
-  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.rag-method__doc:hover {
+.rag-method-detail__doc:hover {
   text-decoration: underline;
 }
 
@@ -270,69 +341,223 @@
 
 .rag-embedders {
   display: grid;
-  gap: var(--space-2);
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
 }
 
 .rag-embedder {
-  display: grid;
-  gap: 2px;
-  text-align: left;
-  padding: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  cursor: pointer;
   position: relative;
+  display: grid;
+  grid-template-columns: 11px minmax(0, 1fr);
+  gap: 1px 8px;
+  align-items: start;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 圆点独占第一列，跟 label 首行对齐；不写 grid-column 会被自动排布塞进
+   11px 宽的第一列，整张卡被撑成几百像素高。 */
+.rag-embedder::before {
+  content: '';
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  margin-top: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+}
+
+.rag-embedder__label,
+.rag-embedder__meta,
+.rag-embedder__note {
+  grid-column: 2;
 }
 
 .rag-embedder[data-active='true'] {
+  background: var(--surface);
+  border-color: var(--accent-border);
+}
+
+.rag-embedder[data-active='true']::before {
   border-color: var(--accent);
-  background: var(--accent-tint);
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-tint-strong);
 }
 
 .rag-embedder:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .rag-embedder__label {
-  font-size: 0.79rem;
+  font-size: 0.78rem;
   font-weight: 600;
+  line-height: 1.35;
   color: var(--ink);
+  word-break: break-word;
 }
 
 .rag-embedder__meta {
   font-family: var(--mono);
+  font-size: 0.65rem;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.rag-embedder__note {
+  margin-top: 2px;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+/* 向量化的固定事实：不随选择变化的那几条，右侧对齐成小表 */
+.rag-facts {
+  display: grid;
+  margin: 0;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.rag-facts__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.rag-facts__row dt {
+  font-size: 0.7rem;
+  color: var(--faint);
+}
+
+.rag-facts__row dd {
+  margin: 0;
+  font-family: var(--mono);
   font-size: 0.68rem;
+  color: var(--ink-soft);
+  text-align: right;
+}
+
+.rag-note {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.55;
+  color: var(--faint);
+}
+
+.rag-embedder__tags {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 3px;
+}
+
+.rag-embedder__tags em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+}
+
+.rag-embedder__tags em[data-kind='literal'] {
+  border-color: var(--line-strong);
+  background: var(--surface-alt);
   color: var(--muted);
 }
 
-.rag-embedder__badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  padding: 1px 6px;
-  border-radius: var(--radius-pill);
+.rag-embedder__tags em[data-kind='off'] {
+  border-color: var(--warn-border);
   background: var(--warn-bg);
   color: var(--warn);
-  font-size: 0.62rem;
 }
 
 /* ---- 运行区 ---- */
 
-.rag-run {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border: 1px dashed var(--accent-border);
+/* 选择回显 + 运行按钮：四步各选了什么摊成一行，确认无误再跑 */
+.rag-recap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  background: var(--surface-alt);
+}
+
+.rag-recap__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  min-width: 0;
+}
+
+.rag-recap__item {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  max-width: 240px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line-strong);
+}
+
+.rag-recap__item:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.rag-recap__label {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+
+.rag-recap__value {
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rag-recap__run {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.rag-recap__run .hint {
+  margin: 0;
+  max-width: 190px;
+  font-size: 0.68rem;
+  line-height: 1.45;
 }
 
 .rag-run__btn {
-  width: 100%;
+  min-width: 128px;
 }
 
 .rag-alert {
@@ -351,6 +576,7 @@
 
 .rag-results {
   min-width: 0;
+  margin-top: var(--space-5);
   scroll-margin-top: 80px;
 }
 
@@ -421,7 +647,6 @@
   border-radius: var(--radius-md);
   background: var(--surface);
   padding: var(--space-4);
-  box-shadow: var(--shadow-xs);
 }
 
 .rag-figure__head {
@@ -432,17 +657,13 @@
   margin-bottom: var(--space-3);
 }
 
+/* 和配置区的步号同一套语言：裸等宽序号，不拿色块压人 */
 .rag-figure__no {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-xs);
-  background: var(--ink);
-  color: var(--page);
+  min-width: 16px;
+  color: var(--faint);
   font-family: var(--mono);
-  font-size: 0.68rem;
-  font-weight: 700;
+  font-size: 0.7rem;
+  font-weight: 600;
 }
 
 .rag-figure__title {
@@ -914,24 +1135,53 @@
 
 /* ---- 响应式 ---- */
 
-@media (max-width: 1080px) {
-  .rag-layout {
+/* 四列压到 2×2：容器窄于 1180 时，四列里的方法说明会挤成窄条 */
+@media (max-width: 1180px) {
+  .rag-flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rag-step + .rag-step {
+    border-left: 0;
+    border-top: 0;
+  }
+
+  .rag-step:nth-child(even) {
+    border-left: 1px solid var(--line);
+  }
+
+  .rag-step:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 860px) {
+  .rag-flow {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .rag-config {
-    position: static;
-    max-height: none;
-    display: block;
+  .rag-step + .rag-step,
+  .rag-step:nth-child(even) {
+    border-left: 0;
   }
 
-  .rag-config__scroll {
-    overflow: visible;
-    padding-right: 0;
+  .rag-step:nth-child(n + 2) {
+    border-top: 1px solid var(--line);
   }
 
-  .rag-run {
-    margin-top: var(--space-4);
+  .rag-recap {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+
+  .rag-recap__item {
+    max-width: none;
+  }
+
+  .rag-recap__run {
+    margin-left: 0;
+    justify-content: space-between;
   }
 
   .rag-vector-grid {

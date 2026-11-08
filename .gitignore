@@ -67,3 +67,5 @@ pytest_*.txt
 # 而且截图是二进制，进仓库只会让 diff 全是噪声。
 frontend/.probe-visual/
 .probe-visual/
+frontend/.probe-rag/
+.probe-rag/

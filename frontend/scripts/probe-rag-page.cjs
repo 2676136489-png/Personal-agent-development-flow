@@ -94,6 +94,25 @@ const METRICS = `(() => {
     figures: all('.rag-figure').length,
     promptChars: (document.querySelector('.rag-prompt')?.textContent || '').length,
     runTotal: text('.rag-runbar__total'),
+    stepTitles: all('.rag-step__title').map((el) => el.textContent.trim()),
+    recapItems: all('.rag-recap__item').length,
+    recapLabels: all('.rag-recap__label').map((el) => el.textContent.trim()),
+    recapValues: all('.rag-recap__value').map((el) => el.textContent.trim()),
+    layout: (() => {
+      const flow = document.querySelector('.rag-flow')
+      const recap = document.querySelector('.rag-recap')
+      const results = document.querySelector('.rag-results')
+      if (!flow || !recap) return null
+      const a = flow.getBoundingClientRect()
+      const b = recap.getBoundingClientRect()
+      return {
+        cols: getComputedStyle(flow).gridTemplateColumns.split(/\\s+/).filter(Boolean).length,
+        recapBelowFlow: b.top >= a.bottom - 1,
+        resultsBelowRecap: results ? results.getBoundingClientRect().top >= b.bottom - 1 : null,
+        flowW: Math.round(a.width),
+        recapW: Math.round(b.width),
+      }
+    })(),
     figureTitles: all('.rag-figure__title').map((el) => el.textContent.trim()),
     warnings: all('.rag-alert--warn').map((el) => el.textContent.replace(/\\s+/g, ' ').trim()),
     runError: text('.rag-alert.alert--error'),
@@ -179,17 +198,33 @@ async function main() {
 
     /* ---------- 1. RAG 页首次进入 ---------- */
     await cdp.send('Page.navigate', { url: `${BASE}/#/rag` })
-    await waitFor(cdp, "!!document.querySelector('.rag-config')", 30_000, 'RAG 配置面板')
+    await waitFor(cdp, "!!document.querySelector('.rag-flow')", 30_000, 'RAG 方法配置')
+    await waitFor(cdp, "!!document.querySelector('.rag-recap')", 30_000, '选择回显')
     await evaluate(cdp, "localStorage.removeItem('arw-rag-config')")
     await sleep(400)
-    report.steps.push({ name: 'before-run', ...(await evaluate(cdp, METRICS)) })
+    const beforeRun = await evaluate(cdp, METRICS)
+    report.steps.push({ name: 'before-run', ...beforeRun })
+    const layoutProblems = []
+    if (beforeRun.stepTitles.length !== 4) {
+      layoutProblems.push(`步骤列应 4 个，实际 ${beforeRun.stepTitles.length}`)
+    }
+    if (beforeRun.recapItems !== 4) {
+      layoutProblems.push(`回显项应 4 个，实际 ${beforeRun.recapItems}`)
+    }
+    if (!beforeRun.layout?.recapBelowFlow) {
+      layoutProblems.push('回显区没有落在流程条下方')
+    }
+    if (beforeRun.overflowX) {
+      layoutProblems.push(`横向溢出：scrollW ${beforeRun.scrollW} > innerW ${beforeRun.innerW}`)
+    }
+    report.layoutProblems = layoutProblems
 
     /* ---------- 2. 跑一次真实流水线（文档语料 + 语义切分） ---------- */
     const switched = await evaluate(
       cdp,
       `(() => {
         const docTab = Array.from(document.querySelectorAll('.rag-switch__btn'))
-          .find((el) => el.textContent.includes('知识库文档'))
+          .find((el) => el.textContent.includes('知识库'))
         if (docTab) docTab.click()
         return !!docTab
       })()`,
@@ -218,6 +253,18 @@ async function main() {
         })()`,
       )
       await sleep(300)
+    }
+
+    // 回显要跟着选择走：选了文档就不该还显示「未选择文档」
+    const recapAfterSwitch = await evaluate(
+      cdp,
+      "Array.from(document.querySelectorAll('.rag-recap__value')).map((el) => el.textContent.trim())",
+    )
+    report.recapAfterSwitch = recapAfterSwitch
+    if (!recapAfterSwitch || recapAfterSwitch.length !== 4) {
+      report.layoutProblems.push(`回显项异常：${JSON.stringify(recapAfterSwitch)}`)
+    } else if (recapAfterSwitch[0].includes('未选择')) {
+      report.layoutProblems.push(`已选文档但回显仍为「${recapAfterSwitch[0]}」`)
     }
 
     await evaluate(
@@ -319,6 +366,14 @@ async function main() {
     }
 
     expect(before?.loaded && !before?.skeleton, 'RAG 页首屏没有正常渲染（骨架屏未消失）')
+    expect(before?.stepTitles.join('') === '语料切块向量化检索', `四步顺序不对：${before?.stepTitles}`)
+    expect(before?.recapItems === 4, `回显项应为 4 个，实际 ${before?.recapItems}`)
+    expect(
+      before?.recapLabels.join('/') === '1 · 语料/2 · 切块/3 · 向量/4 · 检索',
+      `回显标签不对：${before?.recapLabels}`,
+    )
+    report.layoutProblems.forEach((msg) => fail.push(msg))
+    expect(after?.layout?.resultsBelowRecap === true, '结果区没有落在回显下方')
     expect(after?.figures === 5, `结果卡片应为 5 张，实际 ${after?.figures}`)
     expect(after?.segments > 0, '切块色带没有渲染出任何段')
     expect(after?.chunkCards === after?.segments, '色带段数与块卡片数不一致')
@@ -349,6 +404,9 @@ async function main() {
       selected: s.selectedHits,
       promptChars: s.promptChars,
       runTotal: s.runTotal,
+      steps: s.stepTitles,
+      recap: s.recapValues,
+      layout: s.layout,
       warnings: s.warnings,
       chunksInKb: s.chunkPanel?.chunks,
     })) }, null, 2))
