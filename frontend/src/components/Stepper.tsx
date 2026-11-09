@@ -52,26 +52,48 @@ export function Stepper({ items, caption, captionBadge }: StepperProps) {
   const activeIndex = items.findIndex((item) => item.status === 'active')
   const doneCount = items.filter((item) => item.status === 'done').length
 
+  // 回炉有向边：待重验节点（核对验证）→ 当前节点（研究检索）。
+  // 底部的文字说明解释了「为什么回炉」，这条弧线解释「回到哪」——
+  // 逆向跳转只在文字里说，用户扫一眼步骤条仍然以为流程是纯线性的。
+  const reworkIndex = items.findIndex((item) => item.status === 'rework')
+  const showArc = reworkIndex > activeIndex && activeIndex >= 0
+  const n = items.length
+  // 每个节点圆点在自己的格子水平中心：left = (i + 0.5) / n
+  const arcLeft = ((activeIndex + 0.5) / n) * 100
+  const arcWidth = ((reworkIndex - activeIndex) / n) * 100
+
   return (
     <div>
-      <ol className="stepper" aria-label="任务执行步骤">
-        {items.map((item, index) => (
-          <li
-            key={item.key}
-            className={`stepper__item stepper__item--${item.status}`}
-            style={{ ['--fill' as string]: FILL[item.status] }}
-            aria-current={item.status === 'active' ? 'step' : undefined}
+      {/* ol 的合法子元素只有 li，弧线作为绝对定位覆盖层放在外层容器上 */}
+      <div className="stepper-wrap">
+        {showArc && (
+          <div
+            className="stepper__rework-arc"
+            style={{ left: `${arcLeft}%`, width: `${arcWidth}%` }}
+            aria-hidden="true"
           >
-            <span className="stepper__dot" aria-hidden="true">
-              {item.status === 'done' ? '✓' : item.status === 'error' ? '!' : index + 1}
-            </span>
-            <span className="stepper__label">{item.label}</span>
-            <span className="stepper__count">
-              {item.count && item.count > 1 ? `×${item.count}` : STATUS_TEXT[item.status]}
-            </span>
-          </li>
-        ))}
-      </ol>
+            <span className="stepper__rework-arc-label">回炉补充研究</span>
+          </div>
+        )}
+        <ol className={`stepper${showArc ? ' stepper--rework' : ''}`} aria-label="任务执行步骤">
+          {items.map((item, index) => (
+            <li
+              key={item.key}
+              className={`stepper__item stepper__item--${item.status}`}
+              style={{ ['--fill' as string]: FILL[item.status] }}
+              aria-current={item.status === 'active' ? 'step' : undefined}
+            >
+              <span className="stepper__dot" aria-hidden="true">
+                {item.status === 'done' ? '✓' : item.status === 'error' ? '!' : index + 1}
+              </span>
+              <span className="stepper__label">{item.label}</span>
+              <span className="stepper__count">
+                {item.count && item.count > 1 ? `×${item.count}` : STATUS_TEXT[item.status]}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
 
       {caption && (
         <p className="stepper-caption">

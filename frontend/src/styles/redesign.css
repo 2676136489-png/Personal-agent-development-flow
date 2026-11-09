@@ -549,6 +549,11 @@ p { line-height: var(--leading-relaxed); }
 
 /* ============================== ⑧ v2：Stepper（步骤条） ============================== */
 
+/* 外层定位容器：回炉弧线是覆盖层，锚定在它上面 */
+.stepper-wrap {
+  position: relative;
+}
+
 .stepper {
   display: grid;
   grid-auto-flow: column;
@@ -557,6 +562,46 @@ p { line-height: var(--leading-relaxed); }
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* 回炉时给上方腾出弧线的空间 */
+.stepper--rework {
+  padding-top: 26px;
+}
+
+/* 回炉有向边：核对验证（待重验）→ 研究检索 的返回路径。
+   门拱形虚线 + 箭头指向回程终点，颜色与概览页流程图的回环一致（--accent-2） */
+.stepper__rework-arc {
+  position: absolute;
+  top: 12px;
+  height: 14px;
+  border: 2px dashed var(--accent-2);
+  border-bottom: none;
+  border-radius: 14px 14px 0 0;
+  pointer-events: none;
+}
+
+/* 箭头：贴在左端（回程终点 = 当前节点）上方，指向下方节点 */
+.stepper__rework-arc::after {
+  content: "";
+  position: absolute;
+  left: -4px;
+  bottom: -1px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--accent-2);
+}
+
+.stepper__rework-arc-label {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--accent-2);
 }
 
 .stepper__item {
