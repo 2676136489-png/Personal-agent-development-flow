@@ -104,6 +104,10 @@ const STEP_DEFS: { key: string; label: string; hint: string }[] = [
  *
  * 「已完成」的判据是**节点在 steps 里出现过**；研究循环与验证回炉会让同一节点
  * 出现多次，所以额外带上 `count` 显示 ×N —— 用户能直观看到「这一步回炉过」。
+ *
+ * verify 是唯一的例外：它判定「needs_more」的那一刻起，绿色打勾就是误导 ——
+ * 底部写着「已回炉」、步骤条却挂着对勾，用户会以为状态错乱。所以最后一次
+ * verify 若是 needs_more 且运行还没到终态，该节点显示为 rework（待重验）。
  */
 function buildStepItems(run: ResearchRun | null): StepItem[] {
   const executed = new Map<string, number>()
@@ -111,12 +115,29 @@ function buildStepItems(run: ResearchRun | null): StepItem[] {
     executed.set(step.node, (executed.get(step.node) ?? 0) + 1)
   }
 
+  const steps = run?.steps ?? []
+  const lastStep = steps.length > 0 ? steps[steps.length - 1] : null
+  // tsconfig lib 未开 es2023，findLast 不可用 —— 倒序遍历找最后一次 verify
+  let lastVerifyVerdict: string | undefined
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    if (steps[i].node === 'verify') {
+      lastVerifyVerdict = steps[i].verdict
+      break
+    }
+  }
+  const verifyNeedsMore =
+    run?.status !== 'completed' && lastVerifyVerdict === 'needs_more'
+
+  // activeNode 决定「正在跑哪步」的高亮。两个修正：
+  // 1. awaiting_approval 时最后一条 step 往往还停在 verify，但流程实际停在写报告前
+  // 2. verify 判了 needs_more 之后、research 补跑完之前，steps 还没有新记录，
+  //    此时图必然在回炉补研究的路上 —— 高亮 research 而不是停在 verify
   const activeNode =
     run?.status === 'awaiting_approval'
       ? 'write'
-      : run && run.steps.length > 0
-        ? run.steps[run.steps.length - 1].node
-        : null
+      : lastStep?.node === 'verify' && lastStep.verdict === 'needs_more'
+        ? 'research'
+        : (lastStep?.node ?? null)
   const failed = run?.status === 'failed' || run?.status === 'cancelled'
   const finished = run?.status === 'completed'
 
@@ -131,6 +152,9 @@ function buildStepItems(run: ResearchRun | null): StepItem[] {
     const count = executed.get(def.key) ?? 0
     if (finished) {
       return { key: def.key, label: def.label, status: 'done' as const, count }
+    }
+    if (def.key === 'verify' && verifyNeedsMore) {
+      return { key: def.key, label: def.label, status: 'rework' as const, count }
     }
     if (activeNode === def.key) {
       return {
@@ -163,8 +187,13 @@ function currentStepCaption(run: ResearchRun | null, items: StepItem[]): string 
     return undefined
   }
   const def = STEP_DEFS.find((d) => d.key === active.key)
-  const lastSummary = run.steps.length > 0 ? run.steps[run.steps.length - 1].summary : ''
-  return lastSummary ? `${def?.label}：${lastSummary}` : def?.hint
+  const lastStep = run.steps.length > 0 ? run.steps[run.steps.length - 1] : null
+  // 回炉期间（verify 判 needs_more、research 补跑中）：最后一条 step 的摘要
+  // 是「判定：needs_more」，直接拼成「研究检索：判定：needs_more」语义不通
+  if (active.key === 'research' && lastStep?.node === 'verify' && lastStep.verdict === 'needs_more') {
+    return '验证判定证据不足，正在回炉补充研究…'
+  }
+  return lastStep?.summary ? `${def?.label}：${lastStep.summary}` : def?.hint
 }
 
 /**
@@ -420,10 +449,21 @@ function buildPhaseTimeline(events: RunEvent[]): ProcessTimelineItem[] {
           id: 'approval',
           title: '等待人工确认',
           body: '证据已整理完毕，需要你确认后再生成最终报告',
-          status: 'error',
+          // warn 而不是 error：审批闸门是流程的正常暂停点，红色会让人以为出错了
+          status: 'warn',
         })
         break
-      case 'task_completed':
+      case 'task_completed': {
+        // 里程碑只新增 finish 还不够：report 此刻还停在「正在汇总…」、approval 还挂着
+        // 「等待确认」，都变成了永远不结束的假状态 —— 终态到达时把这两个阶段收尾
+        const report = phases.get('report')
+        if (report) {
+          phases.set('report', { ...report, body: '报告已生成', status: 'done' })
+        }
+        const approval = phases.get('approval')
+        if (approval) {
+          phases.set('approval', { ...approval, body: '已完成确认', status: 'done' })
+        }
         phases.set('finish', {
           id: 'finish',
           title: '研究完成',
@@ -432,29 +472,36 @@ function buildPhaseTimeline(events: RunEvent[]): ProcessTimelineItem[] {
           time: new Date(event.ts).toLocaleTimeString(),
         })
         break
+      }
       case 'task_failed':
+      case 'task_cancelled': {
+        // 与 task_completed 同理：中途断掉的运行，report / approval 不能永远停在
+        // 「正在汇总…」「等待确认」的假状态里
+        const report = phases.get('report')
+        if (report && report.status === 'active') {
+          phases.set('report', { ...report, body: '报告未生成', status: 'error' })
+        }
+        const approval = phases.get('approval')
+        if (approval && approval.status === 'warn') {
+          phases.set('approval', { ...approval, body: '未完成确认', status: 'error' })
+        }
         phases.set('finish', {
           id: 'finish',
-          title: '研究失败',
-          body: String(p.error ?? '未知错误'),
+          title: event.type === 'task_failed' ? '研究失败' : '已终止',
+          body: String(p.error ?? p.reason ?? '任务未完成'),
           status: 'error',
         })
         break
-      case 'task_cancelled':
-        phases.set('finish', {
-          id: 'finish',
-          title: '已终止',
-          body: String(p.reason ?? '任务被手动终止'),
-          status: 'error',
-        })
-        break
+      }
       default:
         break
     }
   }
 
-  const order = ['start', 'plan', 'retrieve', 'analyze', 'verify', 'report', 'approval', 'finish']
-  return order.map((key) => phases.get(key)).filter(Boolean) as ProcessTimelineItem[]
+  // 按事件**首次到达**的真实顺序输出（Map 保留插入序，重复 set 同一 key 不改位置）。
+  // 之前的静态 order 把 report 排在 approval 前，但真实时序是「先等确认、确认后才写报告」，
+  // 固定顺序会把这两个阶段的先后画反。
+  return Array.from(phases.values())
 }
 
 export interface ResearchWorkflowProps {

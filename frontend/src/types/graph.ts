@@ -36,6 +36,8 @@ export interface ResearchReport {
 export interface RunStep {
   node: string
   summary: string
+  /** verify 节点专有：pass = 通过；needs_more = 判定证据不足、回炉补研究 */
+  verdict?: string
 }
 
 /** 后端解析好的一条依据来源（app/graph/sources.py）。前端只渲染，不解析。 */

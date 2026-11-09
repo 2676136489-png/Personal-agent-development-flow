@@ -823,7 +823,9 @@ async def verify_node(state: ResearchState, config: RunnableConfig) -> dict:
     return {
         "verification": data.model_dump(),
         "verify_attempts": state.get("verify_attempts", 0) + 1,
-        "steps": [_step("verify", f"判定：{data.verdict}")],
+        # verdict 单独带一份：前端步骤条要区分「验证通过」和「验证不通过、已回炉」，
+        # 靠解析 summary 文本太脆，结构化字段最稳
+        "steps": [{"node": "verify", "summary": f"判定：{data.verdict}", "verdict": data.verdict}],
         "usage": [{"purpose": "verify", **usage}],
     }
 

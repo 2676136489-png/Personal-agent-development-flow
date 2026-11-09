@@ -5,7 +5,11 @@ export interface ProcessTimelineItem {
   title: string
   body?: ReactNode
   detail?: ReactNode
-  status: 'done' | 'active' | 'error' | 'pending'
+  /**
+   * done 完成 / active 进行中 / warn 暂停等用户（如审批闸门）/ error 失败 / pending 未到
+   * warn 与 error 的区别：审批等待是流程的正常暂停点，不该染成红色吓人
+   */
+  status: 'done' | 'active' | 'warn' | 'error' | 'pending'
   time?: string
 }
 

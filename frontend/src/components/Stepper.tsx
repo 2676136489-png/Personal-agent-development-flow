@@ -8,11 +8,12 @@
  * 状态语义：
  *   done    已完成（可能重复执行过，用 `count` 标 ×N）
  *   active  正在执行（呼吸动画 + 朱红实心）
+ *   rework  执行过但判定未通过、等回炉重验（虚线青圈 + 「待重验」，不打勾）
  *   error   该步失败 / 需要人工介入
  *   pending 还没轮到（虚位以待，让用户知道后面还有几步）
  */
 
-export type StepStatus = 'done' | 'active' | 'error' | 'pending'
+export type StepStatus = 'done' | 'active' | 'rework' | 'error' | 'pending'
 
 export interface StepItem {
   key: string
@@ -30,10 +31,11 @@ interface StepperProps {
   captionBadge?: string
 }
 
-/** 连接线的填充比例：已完成 = 满，进行中 = 半，未开始 = 0 */
+/** 连接线的填充比例：已完成 = 满，进行中/待重验 = 半（回炉在路上），未开始 = 0 */
 const FILL: Record<StepStatus, number> = {
   done: 1,
   active: 0.5,
+  rework: 0.5,
   error: 1,
   pending: 0,
 }
@@ -41,6 +43,7 @@ const FILL: Record<StepStatus, number> = {
 const STATUS_TEXT: Record<StepStatus, string> = {
   done: '已完成',
   active: '进行中',
+  rework: '待重验',
   error: '需处理',
   pending: '待执行',
 }

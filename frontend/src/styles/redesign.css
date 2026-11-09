@@ -648,6 +648,17 @@ p { line-height: var(--leading-relaxed); }
   background: var(--danger-bg);
 }
 
+/* 待重验：执行过但判定未通过、等回炉重验 —— 虚线琥珀圈，明确不打勾 */
+.stepper__item--rework .stepper__dot {
+  border-style: dashed;
+  border-color: var(--warn-border);
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.stepper__item--rework .stepper__label { color: var(--warn); }
+.stepper__item--rework .stepper__count { color: var(--warn); }
+
 .stepper__label {
   text-align: center;
   font-size: var(--text-xs);
@@ -862,6 +873,12 @@ p { line-height: var(--leading-relaxed); }
 .process-timeline__item--error .process-timeline__dot {
   border-color: var(--danger);
   background: var(--danger);
+}
+
+/* 暂停等用户（审批闸门）：琥珀空心圈 —— 是流程暂停点，不是错误 */
+.process-timeline__item--warn .process-timeline__dot {
+  border-color: var(--warn);
+  background: var(--surface);
 }
 
 .process-timeline__title { font-weight: 600; color: var(--ink); }
