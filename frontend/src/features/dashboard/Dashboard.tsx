@@ -109,8 +109,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: NavigateFn }) {
         </StaggerItem>
         <StaggerItem>
           <p className="hero-lede">
-            输入一个研究问题，平台自动完成「理解 → 规划 → 检索 → 分析 → 核对 → 写报告」，
-            过程实时可见，写报告前会停下来等你确认，每条结论都标了来源。
+            输入一个研究问题，平台自动跑完七步流水线：过程实时可见，写报告前会停下来等你确认，每条结论都标了来源。
           </p>
         </StaggerItem>
         <StaggerItem>

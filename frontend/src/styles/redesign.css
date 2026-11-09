@@ -495,6 +495,19 @@ p { line-height: var(--leading-relaxed); }
   max-width: var(--measure-lede);
   margin: 0;
   font-size: var(--text-md);
+  /* 长导语避免末行孤字；不支持 text-wrap 的浏览器自动忽略 */
+  text-wrap: pretty;
+}
+
+/* 导语里的步骤链：一步连同箭头是不可断行的原子，断行只发生在两步之间 */
+.lede-step {
+  white-space: nowrap;
+}
+
+.lede-arrow {
+  margin: 0 5px;
+  color: var(--faint);
+  font-family: var(--font-mono);
 }
 
 /* 页头右侧的元信息（等宽，右对齐）—— 让每页"这是什么、怎么用"有固定位置 */
@@ -970,6 +983,8 @@ p { line-height: var(--leading-relaxed); }
   max-width: 54ch;
   color: var(--muted);
   font-size: var(--text-md);
+  /* 居中段落最怕孤字成行（「源。」单独占一行）：balance 让各行长度对齐 */
+  text-wrap: balance;
 }
 
 .hero-actions { gap: var(--space-3); margin-top: var(--space-5); }

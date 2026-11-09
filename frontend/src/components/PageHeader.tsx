@@ -21,8 +21,8 @@ interface PageHeaderProps {
   /** 模块分类（等宽小字，如「深度研究」） */
   eyebrow: string
   title: string
-  /** 一句话说明这个模块解决什么问题 */
-  lede: string
+  /** 一句话说明这个模块解决什么问题；带步骤链的页面传 JSX（用 lede-step 防断行） */
+  lede: ReactNode
   /** 右侧说明卡：建议 2–3 条（能做什么 / 怎么用 / 注意） */
   notes?: PageHeaderNote[]
   /** 标题右侧的状态区（徽标、按钮等） */

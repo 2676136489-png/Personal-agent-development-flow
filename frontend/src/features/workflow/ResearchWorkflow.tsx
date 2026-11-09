@@ -246,6 +246,22 @@ function renderEventIcon(type: string): JSX.Element {
   return <Icon size={13} />
 }
 
+/**
+ * 页头导语里的步骤链：每步连同箭头包成不可断行的整体。
+ *
+ * 直接写「理解任务 → 制定计划 → …」时，CJK 文本允许在任意字间断行，
+ * 「分析」和「归纳」会被拆到两行、箭头悬在行尾——链是流程的原子单位，
+ * 断行只应该发生在两步之间。
+ */
+function stepChain(items: readonly string[]): JSX.Element[] {
+  return items.map((item, index) => (
+    <span className="lede-step" key={item}>
+      {item}
+      {index < items.length - 1 && <span className="lede-arrow">→</span>}
+    </span>
+  ))
+}
+
 function newThreadId(): string {
   // [B14] 后端要求 thread_<12 位十六进制>。crypto.randomUUID 去掉连字符后是 32 位十六进制，
   // 直接取前 12 位即可；降级路径也必须产出十六进制（Math.random().toString(36) 会含 g~z，
@@ -726,7 +742,13 @@ export function ResearchWorkflow({ focusThread }: ResearchWorkflowProps) {
       <PageHeader
         eyebrow="深度研究"
         title="跑一次完整的研究"
-        lede="基于 LangGraph 的七步流水线：理解任务 → 制定计划 → 研究检索 → 抽取证据 → 分析归纳 → 核对验证 → 撰写报告。检索与验证会循环回炉，直到证据足够；写最终报告前会停下来等你确认。"
+        lede={
+          <>
+            基于 LangGraph 的七步流水线：
+            {stepChain(['理解任务', '制定计划', '研究检索', '抽取证据', '分析归纳', '核对验证', '撰写报告'])}
+            。检索与验证会循环回炉，直到证据足够；写最终报告前会停下来等你确认。
+          </>
+        }
         notes={[
           { term: '能做什么', desc: '产出一份结构化、每条结论都能溯源到原始来源的研究报告。' },
           { term: '怎么用', desc: '输入问题 → 设定轮数 → 启动 → 跟随步骤条 → 在确认闸门把关 → 取走报告。' },
