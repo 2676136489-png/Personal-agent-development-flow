@@ -2,7 +2,8 @@
 
 写给以后回来看这个仓库的人，也写给我自己。README 讲的是「怎么跑起来」，这份文档讲的是「这东西是什么、为什么这么做」。
 
-**线上地址**：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/>
+**线上地址**：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/?sharecode=JJ4JF7TBGM>
+（托管平台要求带分享码访问；重新发布会更新分享码，以本文档最新提交为准）
 
 ![深度研究页](docs/images/research-workflow.jpg)
 
@@ -168,7 +169,7 @@ main.main → transform=matrix(1,0,0,1,0,0)   animation=page-in fill=both
 
 原先那个发布实例在托管侧被移除了，旧域名不再解析，于是以新实例重新发布 `backend/`。
 
-- 当前线上地址：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/>
+- 当前线上地址：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/?sharecode=JJ4JF7TBGM>（平台网关要求带分享码，裸域名返回 403「链接不完整」）
 - 发布参数：`language=python`、`installCmd=pip install -e backend`、`startCmd=python backend/start.py`
   （依赖在 `backend/pyproject.toml`；入口读 `PORT`、绑 `0.0.0.0`、单进程。这两个参数必须显式传，
   自动检测会猜成不存在的 `main.py`，线上起不来）

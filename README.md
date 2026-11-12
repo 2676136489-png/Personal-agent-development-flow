@@ -2,7 +2,8 @@
 
 一个 **Evidence-first（证据优先）的 AI 研究工作台**。输入复杂研究任务，LangGraph 驱动的工作流自动理解任务、制定计划、调用工具（联网搜索 / 抓取网页 / 计算 / 查知识库）收集证据、分析、验证，在写报告前**中断等待人工确认**，产出带来源的研究报告。
 
-**在线地址：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/>**
+**在线地址：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/?sharecode=JJ4JF7TBGM>**
+（托管平台要求链接带分享码；代码重发布后分享码会更新，以仓库最新文档为准）
 
 打开就能用，无需配置环境：模型接智谱 GLM-4-Flash，联网检索接 Tavily。线上是单端口托管——前端产物由 FastAPI 一起提供，`/` 是页面、`/api/*` 是接口。
 
