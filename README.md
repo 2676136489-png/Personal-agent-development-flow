@@ -2,6 +2,9 @@
 
 一个 **Evidence-first（证据优先）的 AI 研究工作台**。输入复杂研究任务，LangGraph 驱动的工作流自动理解任务、制定计划、调用工具（联网搜索 / 抓取网页 / 计算 / 查知识库）收集证据、分析、验证，在写报告前**中断等待人工确认**，产出带来源的研究报告。
 
+**在线入口（永久）：<https://2676136489-png.github.io/personal-design/demo/research.html>**
+（GitHub Pages 托管，地址长期稳定；自动跳转到下面的在线系统）
+
 **在线地址：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/?sharecode=JJ4JF7TBGM>**
 （托管平台要求链接带分享码；代码重发布后分享码会更新，以仓库最新文档为准）
 
