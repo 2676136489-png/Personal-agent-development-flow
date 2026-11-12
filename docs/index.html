@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="robots" content="noindex,nofollow" />
+<title>AI Research Workspace · 证据优先的 AI 研究工作台</title>
+<style>
+  :root {
+    --bg: #0d1424;
+    --panel: #131c30;
+    --ink: #e8eef9;
+    --muted: #9aa8c2;
+    --accent: #2563eb;
+    --accent-2: #22d3ee;
+    --border: rgba(148, 163, 196, 0.22);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.7;
+  }
+  .glow {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(600px 320px at 15% 0%, rgba(37, 99, 235, 0.18), transparent 70%),
+      radial-gradient(500px 300px at 85% 10%, rgba(34, 211, 238, 0.10), transparent 70%);
+  }
+  main { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 72px 24px 64px; }
+  .eyebrow { font-size: 13px; letter-spacing: 0.35em; color: var(--accent-2); font-weight: 600; }
+  h1 { font-size: 40px; line-height: 1.25; margin: 14px 0 18px; }
+  .lede { color: var(--muted); font-size: 17px; max-width: 760px; }
+  .lede strong { color: var(--ink); }
+  .actions { margin-top: 30px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 26px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary { background: linear-gradient(135deg, #2563eb, #3b82f6); color: #fff; box-shadow: 0 8px 24px -8px rgba(37, 99, 235, 0.7); }
+  .btn-ghost { border: 1px solid var(--border); color: var(--ink); }
+  .btn-ghost:hover { border-color: var(--accent-2); }
+  section { margin-top: 64px; }
+  h2 { font-size: 22px; margin-bottom: 20px; }
+  h2::after { content: ""; display: block; width: 42px; height: 3px; margin-top: 10px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px;
+  }
+  .card h3 { font-size: 15px; margin-bottom: 8px; }
+  .card p { color: var(--muted); font-size: 13.5px; }
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .shots figure { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--panel); }
+  .shots img { width: 100%; display: block; }
+  .shots figcaption { padding: 10px 16px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--border); }
+  .stack { display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip { padding: 7px 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); font-size: 13px; font-family: ui-monospace, Consolas, monospace; color: var(--muted); }
+  ol.points { padding-left: 20px; color: var(--muted); font-size: 14.5px; }
+  ol.points li { margin-bottom: 12px; }
+  ol.points strong { color: var(--ink); }
+  .metrics { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 18px; }
+  .metric { flex: 1 1 150px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; text-align: center; }
+  .metric b { display: block; font-size: 24px; color: var(--accent-2); font-family: ui-monospace, Consolas, monospace; }
+  .metric span { font-size: 12.5px; color: var(--muted); }
+  footer { margin-top: 72px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  footer a { color: var(--accent-2); text-decoration: none; }
+  @media (max-width: 720px) { .shots { grid-template-columns: 1fr; } h1 { font-size: 30px; } }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<main>
+  <p class="eyebrow">PROJECT SHOWCASE</p>
+  <h1>AI Research Workspace</h1>
+  <p class="lede">
+    一个<strong>证据优先（Evidence-first）</strong>的 AI 研究工作台：输入复杂研究任务，
+    LangGraph 工作流自动拆解目标、多轮检索取证、分析、验证——
+    <strong>在写报告前中断等待人工确认</strong>，产出每条结论都标注证据编号、可溯源到原始来源的研究报告。
+  </p>
+  <div class="actions">
+    <!-- 分享码变化时只改这一个常量，简历上的本页地址永不失效 -->
+    <a class="btn btn-primary" id="live-link" href="https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/?sharecode=JJ4JF7TBGM">进入在线系统 ↗</a>
+    <a class="btn btn-ghost" href="https://github.com/2676136489-png/Personal-agent-development-flow">查看源码（GitHub）</a>
+  </div>
+
+  <section>
+    <h2>核心能力</h2>
+    <div class="grid">
+      <div class="card"><h3>七步研究流水线</h3><p>理解任务 → 计划 → 检索 → 证据 → 分析 → 验证 → 报告；证据不足与验证不通过自动回炉，全程步数与预算有上限护栏。</p></div>
+      <div class="card"><h3>人工确认闸门</h3><p>写报告前强制中断（interrupt_before），等确认方向再落笔；终态不可复活，防止重复批准。</p></div>
+      <div class="card"><h3>结论可溯源</h3><p>报告结论挂证据编号，证据标注来源（知识库文档 / 网页）；一个引用都没标时自动写进局限说明。</p></div>
+      <div class="card"><h3>过程全透明</h3><p>时间线展示每步输入输出、工具调用台账、token 计量与每日预算；实时通道不可用时自动降级轮询。</p></div>
+      <div class="card"><h3>RAG 实验台</h3><p>检索链路五步可视化：切块边界、向量热力图、可旋转的三维向量空间、倒排索引面板、BM25 对比。</p></div>
+      <div class="card"><h3>知识库可信度守卫</h3><p>向量无语义能力时整体让位联网检索；语义引用设 0.65 相关度门槛，沾边片段不进依据来源。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>界面</h2>
+    <div class="shots">
+      <figure><img src="images/research-workflow.jpg" alt="深度研究页" loading="lazy" /><figcaption>深度研究：执行进度、回炉弧线与依据来源</figcaption></figure>
+      <figure><img src="images/rag-lab.jpg" alt="RAG 流程页" loading="lazy" /><figcaption>RAG 实验台：四条横区 + 五步可视化</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>技术栈与规模</h2>
+    <div class="stack">
+      <span class="chip">Python · FastAPI</span>
+      <span class="chip">LangGraph</span>
+      <span class="chip">SQLite</span>
+      <span class="chip">React 18</span>
+      <span class="chip">Vite 5</span>
+      <span class="chip">TypeScript</span>
+      <span class="chip">智谱 GLM-4-Flash</span>
+      <span class="chip">embedding-3 · 2048 维</span>
+      <span class="chip">Tavily</span>
+      <span class="chip">CDP 探针</span>
+    </div>
+    <div class="metrics">
+      <div class="metric"><b>7</b><span>工作流节点</span></div>
+      <div class="metric"><b>256</b><span>后端测试全通过</span></div>
+      <div class="metric"><b>1.38 万</b><span>后端代码行数</span></div>
+      <div class="metric"><b>5 个</b><span>前端依赖</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>架构上的几个关键取舍</h2>
+    <ol class="points">
+      <li><strong>图编排而非线性链</strong>：「证据不够就再来一轮」的回环用条件边表达，中断恢复需要整份 State 可持久化——链式结构两者都做不好。</li>
+      <li><strong>实时通道永远有轮询兜底</strong>：托管网关会缓冲 SSE（连响应头都不下发），事件按 id 增量拉取 + 快照定时回拉，任何网络环境下进度都自己往前走。</li>
+      <li><strong>状态机靠显式业务标记</strong>：等待确认的判定来自业务标记而不是「图跑到哪了」，LangGraph 执行中途也会误判。</li>
+      <li><strong>验证必须实际运行</strong>：一组零依赖 CDP 探针在真实浏览器里断言布局几何、双主题对比度、字体真实下载——截图目测不作为依据。</li>
+      <li><strong>有意识划出去的范围</strong>：Multi-Agent、复杂记忆、并行检索都不做——7 个节点是同一 Agent 的阶段，拆开只增加消息传递成本，不增强「可溯源 / 可观察 / 可复核」。</li>
+    </ol>
+  </section>
+
+  <footer>
+    <span>AI Research Workspace · LangGraph 证据优先研究工作台</span>
+    <span><a href="https://github.com/2676136489-png/Personal-agent-development-flow">GitHub 仓库</a> · 本页由 GitHub Pages 托管，地址长期有效</span>
+  </footer>
+</main>
+<script>
+  // 便于快速核对当前分享码是否有效：控制台执行 checkLive()
+  window.checkLive = async () => {
+    const url = document.getElementById('live-link').href;
+    const res = await fetch(url, { mode: 'no-cors' });
+    return { url, status: res.type };
+  };
+</script>
+</body>
+</html>
