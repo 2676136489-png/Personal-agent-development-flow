@@ -1,15 +1,24 @@
-import { m, useReducedMotion } from 'motion/react'
+import { m, useInView, useReducedMotion } from 'motion/react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
- * 自绘 SVG 研究流水线（hero 视觉）——按有向图来画，不是一条横线串到底。
+ * 自绘 SVG 研究流水线（首页首屏之下的主视觉）——按有向图来画，不是一条横线串到底。
  *
  * 真实的执行结构里有两个「不是直线」的地方：决策 ⇄ 检索 会循环（证据不够就
  * 再检索一轮），检索完才进入分析。所以布局用蛇形两行：上排 理解→计划→决策→检索，
  * 在右端拐下来，下排 分析→验证→报告 反向走。每条边都带箭头（有向、无权），
  * 回环单独走上方一条虚线 —— 「会反复检索」这件事在图上一眼可见。
  *
- * 全部用 motion 的 SVG pathLength / scale 动画实现，零额外依赖。
+ * 动画是**一步一步点亮的**，不是一次全出现：滚到图进入视口后，从「理解」开始，
+ * 每 430ms 推进一个节点 —— 先画出指向它的那条边，再让节点反白，走完 7 步后
+ * 全部落回「已完成」的描边态。这样读者是跟着一条研究路径看下来的，
+ * 而不是面对一张静态拓扑图自己找起点。
+ *
+ * 为什么用 step 状态而不是给每个元素写 delay：步骤之间要能被打断/重放，
+ * 一个整数状态比十来个错峰 delay 更好推理，也方便 prefers-reduced-motion
+ * 直接跳到终态。
  */
+
 const NODES = [
   { label: '理解', sub: '任务' },
   { label: '计划', sub: '拆解' },
@@ -24,8 +33,8 @@ const W = 760
 const H = 218
 const ROW1 = 70
 const ROW2 = 182
-const NODE_W = 92
-const NODE_H = 34
+const NODE_W = 96
+const NODE_H = 36
 const R = NODE_H / 2
 
 /** 蛇形两行的节点坐标：上排从左到右 1-4，右端拐下，下排从右到左 5-7 */
@@ -39,19 +48,19 @@ const POS = [
   { x: 92, y: ROW2 },
 ] as const
 
-/** 有向边（from → to），delay 是描线动画的出场时刻，按拓扑顺序错峰 */
-const EDGES: { from: number; to: number; delay: number; loop?: boolean }[] = [
-  { from: 0, to: 1, delay: 0.2 },
-  { from: 1, to: 2, delay: 0.55 },
-  { from: 2, to: 3, delay: 0.9 },
-  { from: 3, to: 2, delay: 1.3, loop: true },
-  { from: 3, to: 4, delay: 1.7 },
-  { from: 4, to: 5, delay: 2.05 },
-  { from: 5, to: 6, delay: 2.4 },
+/** 有向边（from → to）。节点的序号 = to + 1，边跟着目标节点一起出现。 */
+const EDGES: { from: number; to: number }[] = [
+  { from: 0, to: 1 },
+  { from: 1, to: 2 },
+  { from: 2, to: 3 },
+  { from: 3, to: 4 },
+  { from: 4, to: 5 },
+  { from: 5, to: 6 },
 ]
 
-const NODE_DELAY = [0.1, 0.5, 0.85, 1.2, 1.68, 2.03, 2.38]
-const DRAW = 0.32
+const STEP_MS = 430
+/** 7 个节点 + 1，走完后停在「全部完成」的终态 */
+const FINAL_STEP = NODES.length + 1
 
 function edgePath(from: number, to: number): string {
   const a = POS[from]
@@ -68,13 +77,36 @@ function edgePath(from: number, to: number): string {
 }
 
 export function PipelineDiagram() {
+  const ref = useRef<SVGSVGElement>(null)
   const reduced = useReducedMotion()
+  const inView = useInView(ref, { once: true, amount: 0.35 })
+  const [step, setStep] = useState(reduced ? FINAL_STEP : 0)
+
+  useEffect(() => {
+    if (!inView || reduced || step >= FINAL_STEP) return
+    // 最后一个节点多留一会儿再收尾，否则「报告」刚亮就被抹平
+    const timer = window.setTimeout(
+      () => setStep((value) => value + 1),
+      step === 0 ? 240 : step >= NODES.length ? 900 : STEP_MS,
+    )
+    return () => window.clearTimeout(timer)
+  }, [inView, reduced, step])
+
   const loop = POS[3]
   const loopTarget = POS[2]
   const loopPath = `M ${loop.x} ${loop.y - R - 6} C ${loop.x} 18, ${loopTarget.x} 18, ${loopTarget.x} ${loopTarget.y - R - 6}`
+  const loopDrawn = step > 3
+
+  /** pending → 未轮到；active → 正在执行（反白）；done → 已走过（描边） */
+  const stateOf = (index: number): 'pending' | 'active' | 'done' => {
+    if (step === index + 1) return 'active'
+    if (step > index + 1) return 'done'
+    return 'pending'
+  }
 
   return (
     <svg
+      ref={ref}
       className="pipeline"
       viewBox={`0 0 ${W} ${H}`}
       role="img"
@@ -91,7 +123,7 @@ export function PipelineDiagram() {
           markerHeight="6.5"
           orient="auto-start-reverse"
         >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,.75)" />
         </marker>
         <marker
           id="pipeline-arrow-loop"
@@ -102,43 +134,60 @@ export function PipelineDiagram() {
           markerHeight="6.5"
           orient="auto-start-reverse"
         >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent-2)" />
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,.45)" />
         </marker>
       </defs>
 
       {EDGES.map((edge) => {
-        const common = {
-          fill: 'none',
-          markerEnd: edge.loop ? 'url(#pipeline-arrow-loop)' : 'url(#pipeline-arrow)',
-          initial: reduced ? { pathLength: 1, opacity: 1 } : { pathLength: 0, opacity: edge.loop ? 0 : 1 },
-          animate: { pathLength: 1, opacity: 1 },
-          transition: { duration: edge.loop ? 0.5 : DRAW, delay: edge.delay, ease: 'easeInOut' as const },
-        }
-        return edge.loop ? (
-          // 回环边：检索 → 决策，走上方虚线
-          <m.path key={`loop-${edge.from}-${edge.to}`} d={loopPath} className="pipeline__loop" {...common} />
-        ) : (
-          <m.path key={`edge-${edge.from}-${edge.to}`} d={edgePath(edge.from, edge.to)} className="pipeline__edge" {...common} />
+        const drawn = step > edge.to
+        return (
+          <m.path
+            key={`edge-${edge.from}-${edge.to}`}
+            d={edgePath(edge.from, edge.to)}
+            className="pipeline__edge"
+            fill="none"
+            /* 未画出来时连箭头一起去掉：pathLength=0 只隐藏描边，
+               末端 marker 仍会单独画出来，表现为一个没有线的孤立箭头 */
+            markerEnd={drawn ? 'url(#pipeline-arrow)' : 'none'}
+            initial={false}
+            animate={{ pathLength: drawn ? 1 : 0, opacity: drawn ? 1 : 0 }}
+            transition={{ duration: 0.34, ease: 'easeInOut' }}
+          />
         )
       })}
 
-      <text x={(loop.x + loopTarget.x) / 2} y={12} className="pipeline__loop-label">
+      {/* 回环边：检索 → 决策，走上方虚线；检索一出现它就跟着出现 */}
+      <m.path
+        d={loopPath}
+        className="pipeline__loop"
+        fill="none"
+        markerEnd={loopDrawn ? 'url(#pipeline-arrow-loop)' : 'none'}
+        initial={false}
+        animate={{ pathLength: loopDrawn ? 1 : 0, opacity: loopDrawn ? 1 : 0 }}
+        transition={{ duration: 0.5, ease: 'easeInOut' }}
+      />
+      <m.text
+        x={(loop.x + loopTarget.x) / 2}
+        y={12}
+        className="pipeline__loop-label"
+        initial={false}
+        animate={{ opacity: loopDrawn ? 1 : 0 }}
+        transition={{ duration: 0.4, delay: loopDrawn ? 0.25 : 0 }}
+      >
         循环补充证据
-      </text>
+      </m.text>
 
       {NODES.map((node, i) => {
         const p = POS[i]
+        const state = stateOf(i)
         return (
           <m.g
             key={node.label}
-            initial={reduced ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.4 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{
-              delay: reduced ? 0 : NODE_DELAY[i],
-              type: 'spring',
-              stiffness: 260,
-              damping: 18,
-            }}
+            data-state={state}
+            className="pipeline__group"
+            initial={false}
+            animate={{ opacity: state === 'pending' ? 0.18 : 1, scale: state === 'pending' ? 0.94 : 1 }}
+            transition={{ type: 'spring', stiffness: 280, damping: 22 }}
             style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
           >
             <rect

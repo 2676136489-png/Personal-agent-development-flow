@@ -131,6 +131,16 @@ try {
     dash.includes('class="cta"') && dash.includes('class="cta-line"') && /class="count"[^>]*>07</.test(dash),
   )
   expect('Hero：加载态文案「Loading model」', dash.includes('id="loader"') && dash.includes('Loading model'))
+  expect(
+    '首屏之下：流水线图排在「从这里开始」之前',
+    dash.includes('home-pipeline') &&
+      dash.indexOf('home-pipeline') > 0 &&
+      dash.indexOf('home-pipeline') < dash.indexOf('section--entry'),
+  )
+  expect(
+    '首屏之下：流水线含 7 个节点 + 回环说明',
+    count(dash, /class="pipeline__group"/g) === 7 && dash.includes('循环补充证据'),
+  )
   expect('首屏之下：三个入口 + 次级文字链', dash.includes('entry-grid') && dash.includes('RAG 流程') && dash.includes('效果评估'))
   expect('首屏之下：入口卡 3 张、1 张主入口', count(dash, /card--entry/g) === 3 && count(dash, /card--primary/g) === 1)
   expect('首屏之下：七步流程仍在', dash.includes('七步流水线') && dash.includes('flow__step'))

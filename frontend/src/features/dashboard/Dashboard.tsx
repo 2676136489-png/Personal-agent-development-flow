@@ -134,6 +134,11 @@ export function Dashboard({ onNavigate }: { onNavigate?: NavigateFn }) {
           )}
         </div>
 
+        {/* 研究流水线：一步一步点亮，作为首屏之下的第一个视觉锚点 */}
+        <div className="home-pipeline">
+          <PipelineDiagram />
+        </div>
+
         {/* 三个核心入口 + 次级文字链 */}
         <section className="section section--entry">
           <Reveal className="section-head">
@@ -186,10 +191,6 @@ export function Dashboard({ onNavigate }: { onNavigate?: NavigateFn }) {
           <FlowOverview />
         </section>
 
-        {/* 流水线结构图：放在最末，作为整页的收束 */}
-        <div className="hero-visual" aria-hidden="true">
-          <PipelineDiagram />
-        </div>
       </div>
     </>
   )

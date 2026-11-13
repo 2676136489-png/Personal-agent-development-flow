@@ -94,6 +94,11 @@ async function main() {
       deviceScaleFactor: 1,
       mobile: false,
     })
+    /* headless Chrome 默认 prefers-reduced-motion: reduce，会直接跳到动画终态；
+       要验证「一步一步点亮」必须显式声明用户没有开启减少动效 */
+    await send('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+    })
 
     if (FLOW === 'rag') {
       await send('Page.navigate', { url: `${BASE}/#/rag` })
@@ -122,6 +127,24 @@ async function main() {
       await sleep(1200)
       await shoot('reports-modal')
       console.log('report card:', opened)
+    }
+
+    if (FLOW === 'pipeline') {
+      await send('Page.navigate', { url: `${BASE}/#/dashboard` })
+      await sleep(4200)
+      await evaluate(`document.querySelector('.home-pipeline')?.scrollIntoView({ block: 'center' })`)
+      await sleep(500)
+      await shoot('pipeline-1')
+      await sleep(900)
+      await shoot('pipeline-2')
+      await sleep(1600)
+      await shoot('pipeline-3')
+      await sleep(2200)
+      await shoot('pipeline-4')
+      const info = await evaluate(
+        `JSON.stringify([...document.querySelectorAll('.pipeline__group')].map((g) => g.dataset.state))`,
+      )
+      console.log(info)
     }
 
     if (FLOW === 'nav') {

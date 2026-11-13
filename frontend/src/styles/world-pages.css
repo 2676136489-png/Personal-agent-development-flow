@@ -165,13 +165,28 @@
   padding: 8px 0;
 }
 
+/* 流水线图：放在状态条与「从这里开始」之间，是首屏之下的第一个视觉锚点 */
+.home-pipeline {
+  padding: clamp(30px, 4.4vw, 62px) 0 clamp(22px, 3vw, 40px);
+}
+
+/* 760 以下不画这张图：760 的 viewBox 塞进 390 宽后节点文字只剩 5px，
+   横向滚动又会让人先看到一张被裁掉一半的图。手机上由下方「七步流水线」
+   的文字版承担同样的信息，不损失内容。 */
+@media (max-width: 760px) {
+  .home-pipeline {
+    display: none;
+  }
+}
+
 .pipeline {
   width: 100%;
   height: auto;
+  overflow: visible;
 }
 
 .pipeline__edge {
-  stroke: rgba(255, 255, 255, 0.45);
+  stroke: rgba(255, 255, 255, 0.6);
   stroke-width: 1;
   fill: none;
 }
@@ -187,6 +202,19 @@
   fill: #000;
   stroke: rgba(255, 255, 255, 0.32);
   stroke-width: 1;
+  transition:
+    fill 0.28s ease,
+    stroke 0.28s ease;
+}
+
+/* 正在执行的那一步反白：黑底白字 → 白底黑字，是这套设计里唯一的「强调」手段 */
+.pipeline__group[data-state="active"] .pipeline__node {
+  fill: #fff;
+  stroke: #fff;
+}
+
+.pipeline__group[data-state="done"] .pipeline__node {
+  stroke: rgba(255, 255, 255, 0.6);
 }
 
 .pipeline__node-label {
@@ -196,6 +224,11 @@
   font-weight: 500;
   text-anchor: middle;
   dominant-baseline: middle;
+  transition: fill 0.28s ease;
+}
+
+.pipeline__group[data-state="active"] .pipeline__node-label {
+  fill: #000;
 }
 
 .pipeline__node-sub {
@@ -203,12 +236,25 @@
   font-size: 9px;
   font-weight: 400;
   letter-spacing: 0.06em;
+  transition: fill 0.28s ease;
+}
+
+.pipeline__group[data-state="active"] .pipeline__node-sub {
+  fill: rgba(0, 0, 0, 0.55);
 }
 
 .pipeline__badge circle {
   fill: #000;
   stroke: rgba(255, 255, 255, 0.5);
   stroke-width: 1;
+  transition:
+    stroke 0.28s ease,
+    fill 0.28s ease;
+}
+
+.pipeline__group[data-state="active"] .pipeline__badge circle {
+  fill: #000;
+  stroke: #fff;
 }
 
 .pipeline__badge-no {
