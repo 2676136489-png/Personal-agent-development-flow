@@ -9,6 +9,11 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import re
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse, PlainTextResponse
@@ -55,6 +60,39 @@ def test_security_headers_are_added():
 def test_hsts_absent_when_not_production():
     client = TestClient(SecurityHeadersMiddleware(_starlette(), csp="", hsts=False))
     assert "strict-transport-security" not in {k.lower() for k in client.get("/x").headers}
+
+
+def test_csp_allows_uplink_loader_inline_script():
+    """CSP 必须放行 Uplink Loader 的内联脚本哈希。
+
+    模块级加载器把 frontend/src/shaders/uplink-loader/uplink-loader.html 以
+    srcDoc 注入沙箱 iframe —— srcdoc 文档**继承父页 CSP**，而组件依赖一段内联
+    <script> 驱动进度。哈希一旦与文件内容失配（改了 HTML 忘改 CSP），加载器
+    会静默退化成黑屏：刻度条不渲染、读数永远停在初始值。
+    本测试把 HTML 与 CSP 硬绑定，改任何一边忘了另一边都会在这里失败。
+    """
+    html_path = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "shaders"
+        / "uplink-loader"
+        / "uplink-loader.html"
+    )
+    html = html_path.read_text(encoding="utf-8")
+    match = re.search(r"<script>([\s\S]*?)</script>", html)
+    assert match, "uplink-loader.html 中找不到内联脚本"
+
+    digest = hashlib.sha256(match.group(1).encode("utf-8")).digest()
+    expected = f"'sha256-{base64.b64encode(digest).decode('ascii')}'"
+
+    from app.main import get_settings
+
+    csp = get_settings().content_security_policy
+    assert expected in csp, (
+        f"CSP 缺少 Uplink Loader 脚本哈希 {expected}；"
+        "改了 uplink-loader.html 后必须同步更新 config.py 的 content_security_policy"
+    )
 
 
 def test_health_endpoint_has_security_headers():

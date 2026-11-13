@@ -4,7 +4,7 @@ import { ChevronDownIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon } from './compo
 import { ToastHost } from './components/Toast'
 import { PageShell } from './components/PageShell'
 import { ScrollProgress } from './components/ScrollProgress'
-import { LoadingState } from './components/LoadingState'
+import { UplinkLoader } from './shaders/uplink-loader/UplinkLoader'
 
 /**
  * 页面级按需加载。
@@ -455,7 +455,11 @@ export default function App() {
           <PageShell key={page}>
             <div className="shell shell--tight">
               <Suspense
-                fallback={<LoadingState variant="card" rows={4} label="正在加载模块…" />}
+                fallback={
+                  <div className="uplink-stage-slot" role="status" aria-label="正在加载模块…">
+                    <UplinkLoader />
+                  </div>
+                }
               >
                 {page === 'dashboard' && <Dashboard onNavigate={navigate} />}
                 {page === 'workflow' && <ResearchWorkflow focusThread={focusThread} />}
