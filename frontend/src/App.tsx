@@ -204,24 +204,29 @@ export default function App() {
             <span>Workspace</span>
           </a>
 
+          {/* 宽屏把所有页面平铺出来（用户明确要求「导航栏应该把这些写出来」）；
+              窄到放不下时才收成 3 个主入口 + 目录。 */}
           <ul className="nav-links">
-            {NAV_PRIMARY.map((item) => (
-              <li key={item.key}>
-                <a
-                  className="nav-link"
-                  href={`#/${item.key}`}
-                  data-active={page === item.key ? 'true' : 'false'}
-                  aria-current={page === item.key ? 'page' : undefined}
-                  onClick={(event) => {
-                    event.preventDefault()
-                    navigate(item.key)
-                  }}
-                >
-                  {item.label}
-                </a>
-              </li>
-            ))}
-            <li data-optional="true">
+            {NAV_ITEMS.map((item) => {
+              const primary = NAV_PRIMARY.some((entry) => entry.key === item.key)
+              return (
+                <li key={item.key} className={primary ? undefined : 'nav-links__extra'}>
+                  <a
+                    className="nav-link"
+                    href={`#/${item.key}`}
+                    data-active={page === item.key ? 'true' : 'false'}
+                    aria-current={page === item.key ? 'page' : undefined}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      navigate(item.key)
+                    }}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              )
+            })}
+            <li className="nav-links__index">
               <button
                 className="nav-index"
                 type="button"

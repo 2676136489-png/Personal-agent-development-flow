@@ -12,8 +12,8 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
-  border: 1px solid var(--line-soft);
-  background: var(--line-soft);
+  border: 1px solid var(--line);
+  background: var(--line);
 }
 
 .entry-grid > .card {
@@ -84,19 +84,19 @@
 .flow {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--line-soft);
+  border-top: 1px solid var(--line);
 }
 
 .flow__step {
   position: relative;
   padding: 24px 28px 26px 0;
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line);
   transition: background 0.3s ease;
 }
 
 .flow__step:nth-child(odd) {
   padding-right: 36px;
-  border-right: 1px solid var(--line-soft);
+  border-right: 1px solid var(--line);
 }
 .flow__step:nth-child(even) {
   padding-left: 36px;
@@ -233,8 +233,8 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1px;
-  border: 1px solid var(--line-soft);
-  background: var(--line-soft);
+  border: 1px solid var(--line);
+  background: var(--line);
 }
 
 .module {

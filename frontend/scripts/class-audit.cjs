@@ -26,7 +26,16 @@ for (const file of walk(path.join(ROOT, 'src'), (n) => n.endsWith('.tsx'))) {
   const re = /className=(?:"([^"]*)"|\{`([^`]*)`\}|\{([^}]*)\})/g
   let match
   while ((match = re.exec(source))) {
-    const raw = match[1] ?? match[2] ?? match[3] ?? ''
+    // 条件表达式里只有引号内的是类名（变量名 / undefined 不是）
+    const raw =
+      match[1] ??
+      match[2] ??
+      (match[3] || '')
+        .replace(/\$\{[^}]*\}/g, ' ')
+        .match(/'[^']*'|"[^"]*"/g)
+        ?.join(' ')
+        .replace(/['"]/g, '') ??
+      ''
     raw
       .replace(/\$\{[^}]*\}/g, ' ')
       .split(/[\s"'`+]+/)

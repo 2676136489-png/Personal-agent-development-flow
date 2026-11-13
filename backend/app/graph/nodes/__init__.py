@@ -390,15 +390,57 @@ async def plan_node(state: ResearchState, config: RunnableConfig) -> dict:
     }
 
 
+#: 兜底计划用来补齐维度的模板。模型（尤其是小参数本地模型）经常只把原问题
+#: 复述成一条子问题，而 ResearchPlan 要求至少 3 条（prompt 里要求 4~7 条）。
+#: 兜底路径必须自己把维度补齐 —— 否则「兜底」会被同一个校验器再拒一次，
+#: 整条研究直接以 ValidationError 结束（真实踩过的线上问题）。
+_FALLBACK_DIMENSIONS = (
+    "现状：目前的主流做法、主要参与者与市场格局是什么？",
+    "对比：不同方案或对象之间的关键差异在哪里？",
+    "数据：有哪些可量化的指标与数据可以支撑结论？",
+    "原因：造成这些差异的深层原因是什么？",
+    "风险：还存在哪些不确定性与风险，后续可能如何演变？",
+)
+
+
+def _fallback_questions(goal: str, seed: list[str]) -> list[str]:
+    """把「任务理解」里的子问题补到至少 4 条，并保持顺序、去重、控长。
+
+    第一条优先带上研究目标，读起来才不是一组通用模板；后面的维度只在
+    确实缺条数时才补，避免把用户/模型已经写好的子问题挤掉。
+    """
+    questions: list[str] = []
+    for item in seed:
+        text = str(item).strip()
+        if text and text not in questions:
+            questions.append(text[:200])
+
+    short_goal = goal.replace("\n", " ").strip().rstrip("？?。. ")
+    short_goal = short_goal[:38]
+
+    for index, template in enumerate(_FALLBACK_DIMENSIONS):
+        if len(questions) >= 4:
+            break
+        text = f"「{short_goal}」{template}" if index == 0 and short_goal else template
+        if text not in questions:
+            questions.append(text)
+
+    return questions[:7]
+
+
 def _fallback_plan(understanding: dict) -> ResearchPlan:
     """计划生成彻底失败时的兜底：从任务理解里抽出目标/子问题，拼一个最小可运行计划。
 
     [A3] 这里必须用 **dict** 而不是 PlanStep 对象来构造 steps：
     ResearchPlan 的 steps 校验器只接受 dict，传对象会被静默过滤成空列表，
     导致「兜底计划」反而一份 0 步的计划（曾经的线上问题）。
+
+    这个函数是整条链路的最后一道兜底，**不允许抛异常**：
+    goal / questions 都要按 schema 的约束截断补齐，否则它失败时整个 run 直接崩。
     """
-    goal = understanding.get("goal") or "完成本次研究"
-    questions = [str(q) for q in (understanding.get("key_questions") or []) if q] or [goal]
+    goal = str(understanding.get("goal") or "完成本次研究").strip()[:500] or "完成本次研究"
+    seed = [str(q) for q in (understanding.get("key_questions") or []) if q]
+    questions = _fallback_questions(goal, seed)
     steps = [
         {
             "index": index,
@@ -409,7 +451,7 @@ def _fallback_plan(understanding: dict) -> ResearchPlan:
     ]
     return ResearchPlan(
         goal=goal,
-        questions=questions[:7],
+        questions=questions,
         steps=steps,  # type: ignore[arg-type]  # 交给 ResearchPlan 的 validator 规范化
         expected_sources=["招聘网站", "技术博客", "官方文档", "行业报告"],
     )

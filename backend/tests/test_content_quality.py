@@ -18,10 +18,13 @@ from app.graph import prompts
 from app.graph.graph import build_initial_state
 from app.graph.nodes import (
     _executed_actions,
+    _fallback_plan,
+    plan_node,
     _pending_questions,
     _pick_retrieve_queries,
 )
 from app.graph.schemas import ResearchReport
+from app.llm.client import BaseLLMClient
 from app.llm.structured import parse_structured_payload
 from app.schemas.research import ResearchPlan
 
@@ -128,6 +131,85 @@ def test_plan_with_empty_steps_rejected():
 def test_valid_plan_accepted():
     plan = ResearchPlan(**_valid_plan_kwargs())
     assert len(plan.steps) == 1
+
+
+# ------------------- [P0] 兜底计划不允许再被同一个校验器拒 -------------------
+
+
+def test_fallback_plan_pads_thin_understanding():
+    """模型只拆出 1 个子问题时，兜底必须自己补齐维度，而不是原样抛回去。
+
+    这是真实线上故障：plan 两次生成都被判「子问题太少」，兜底又拿同一条
+    1 个问题的理解去构造 ResearchPlan，被同一个 validator 再拒一次，
+    整条研究以 ValidationError 结束。
+    """
+    plan = _fallback_plan(
+        {"goal": "研究 2026 年 AI Agent 开发岗位的主要技术要求", "key_questions": ["需要哪些技术？"]}
+    )
+    assert len(plan.questions) >= 4
+    assert len(plan.steps) >= 4
+    # 模型自己给的那条要保留在最前面，补的维度排在后面
+    assert plan.questions[0] == "需要哪些技术？"
+
+
+def test_fallback_plan_survives_empty_understanding():
+    plan = _fallback_plan({})
+    assert len(plan.questions) >= 4
+    assert plan.goal
+    assert len(plan.steps) >= 4
+
+
+def test_fallback_plan_truncates_overlong_goal():
+    plan = _fallback_plan({"goal": "长" * 800, "key_questions": []})
+    assert len(plan.goal) <= 500
+    assert len(plan.questions) >= 4
+
+
+def test_prompts_require_four_sub_questions():
+    """提示词里的下限不能悄悄消失：理解与计划两处都必须写死 4 条。"""
+    assert "至少 4 条" in prompts._UNDERSTAND_SYSTEM
+    assert "至少 4 条" in prompts._PLAN_SYSTEM
+
+
+class _AlwaysInvalidPlanClient(BaseLLMClient):
+    """每次都返回「子问题太少」的假模型：模拟小参数本地模型的真实表现。
+
+    必须继承 BaseLLMClient：complete_structured 的重试/降级逻辑在基类里，
+    只实现 complete 的鸭子类型会在 `client.complete_structured` 处直接 AttributeError。
+    """
+
+    provider_name = "fake-invalid"
+
+    async def complete(self, request):  # noqa: ANN001, ANN201 - 测试替身
+        from app.llm.schemas import LLMResponse, TokenUsage
+
+        return LLMResponse(
+            content='{"goal":"研究目标","questions":["只有一条"],"steps":[{"index":1,"title":"t","instruction":"i"}],"expected_sources":["x"]}',
+            model="fake",
+            provider="fake",
+            usage=TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+            latency_ms=1,
+            finish_reason="stop",
+        )
+
+
+async def test_plan_node_degrades_to_fallback_instead_of_failing_run():
+    """整条 run 不能因为「模型不会拆子问题」而失败：节点必须产出兜底计划。"""
+    from app.graph.nodes.common import NodeDeps, default_deps
+
+    deps = NodeDeps(
+        llm=_AlwaysInvalidPlanClient(),  # type: ignore[arg-type]
+        registry=default_deps().registry,
+    )
+    config = {"configurable": {"deps": deps, "thread_id": "t-plan-fallback"}}
+    state = {
+        "question": "研究 2026 年 AI Agent 开发岗位的主要技术要求",
+        "understanding": {"goal": "研究 2026 年 AI Agent 岗位要求", "key_questions": ["需要哪些技术？"]},
+    }
+    result = await plan_node(state, config)  # type: ignore[arg-type]
+    plan = result["plan"]
+    assert len(plan["questions"]) >= 4
+    assert len(plan["steps"]) >= 4
 
 
 # =============================================================================

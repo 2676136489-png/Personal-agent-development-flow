@@ -100,8 +100,13 @@ try {
     '顶栏：白半圆 logo-mark + 双段字标',
     app.includes('logo-mark') && /<b>Research<\/b>/.test(app) && /<span>Workspace<\/span>/.test(app),
   )
-  expect('顶栏：三个主入口（概览 / 深度研究 / 知识库）', ['概览', '深度研究', '知识库'].every((t) => app.includes(t)))
-  expect('顶栏：目录入口按钮存在（窄屏唯一到达其余页面的入口）', app.includes('class="nav-index"'))
+  expect(
+    '顶栏：八个页面入口全部渲染（宽屏平铺）',
+    ['概览', '深度研究', '知识库', 'RAG 流程', '研究报告', '效果评估', '系统设置', '使用教程'].every(
+      (t) => app.includes(t),
+    ) && count(app, /class="nav-link"/g) === 8,
+  )
+  expect('顶栏：目录入口按钮仍在（<1181px 时替代平铺）', app.includes('class="nav-index"'))
   expect('顶栏：旧的 10 项分组菜单已移除', !app.includes('nav-group') && !app.includes('nav-link__badge'))
   expect('目录浮层：默认关闭（不占 DOM）', !app.includes('index-layer'))
 
@@ -160,8 +165,8 @@ try {
   expect('底与字：纯黑 #000 + 纯白 #fff', /--bg:\s*#000/.test(styles) && /--fg:\s*#fff/.test(styles))
   expect('字体：Poppins 进 var(--font)', /--font:\s*"Poppins"/.test(styles))
   expect('不再出现电光蓝主色', !/#2563eb|#5b93ff|#0e7490/i.test(styles))
-  expect('圆角只有两档（2px / 6px）', /--r-sm:\s*2px/.test(styles) && /--r-md:\s*6px/.test(styles))
-  expect('Hero 规格：100svh + 最小高度 520', /height:\s*100svh/.test(styles) && /min-height:\s*520px/.test(styles))
+  expect('圆角只有两档（6px / 10px）', styles.includes('--r-sm: 6px') && styles.includes('--r-md: 10px'))
+  expect('Hero 规格：100svh + 最小高度 520', styles.includes('height: 100svh') && styles.includes('min-height: 520px'))
   expect(
     'Hero 规格：箭头 2.5px 描边 / CTA hover 反白',
     /\.arrow\s*\{[\s\S]{0,160}border:\s*2\.5px solid #fff/.test(styles) && /\.cta:hover\s*\{\s*background:\s*#fff/.test(styles),
@@ -182,7 +187,17 @@ try {
   for (const file of walk(path.join(ROOT, 'src'), (n) => n.endsWith('.tsx'))) {
     const source = fs.readFileSync(file, 'utf8')
     for (const match of source.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\}|\{([^}]*)\})/g)) {
-      const raw = match[1] ?? match[2] ?? match[3] ?? ''
+      // 条件表达式（{primary ? undefined : 'a'}）里只有引号内的才是类名，
+      // 变量名/undefined 不是 —— 直接按空白切词会把它们也算进来。
+      const raw =
+        match[1] ??
+        match[2] ??
+        (match[3] || '')
+          .replace(/\$\{[^}]*\}/g, ' ')
+          .match(/'[^']*'|"[^"]*"/g)
+          ?.join(' ')
+          .replace(/['"]/g, '') ??
+        ''
       raw
         .replace(/\$\{[^}]*\}/g, ' ')
         .split(/[\s"'`+]+/)
