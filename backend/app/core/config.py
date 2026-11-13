@@ -282,6 +282,9 @@ class Settings(BaseSettings):
     # 因此按环境自动判定：environment == "production" 才下发。
     # CSP：以「同源 + Google Fonts」为基线。脚本只允许同源（构建产物无内联脚本，
     # 因此不需要 unsafe-inline —— 见前端 index.html 的红线注释）。
+    # connect-src 额外放行首屏玻璃立方体的 GLB 来源：那份模型是设计稿指定的
+    # 远端资源，由浏览器直接拉取（不落本地、不复制进仓库）。只放这一个域名，
+    # 不要写成 https: 通配 —— 那等于把 CSP 的 XSS 缓冲带拆掉。
     # 置空字符串可整体关闭 CSP。
     content_security_policy: str = (
         "default-src 'self'; "
@@ -289,7 +292,7 @@ class Settings(BaseSettings):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
         "img-src 'self' data:; "
-        "connect-src 'self'; "
+        "connect-src 'self' https://motionsites.org; "
         "base-uri 'self'; "
         "form-action 'self'; "
         "frame-ancestors 'none'"

@@ -280,7 +280,7 @@ export function Settings() {
               <Metric label="版本" value={health.data.version} />
               <Metric label="API 地址" value={API_BASE_URL} />
               <Metric label="延迟" value={`${health.latencyMs} ms`} />
-              <Metric label="服务器时间（UTC）" value={new Date(health.data.timestamp).toUTCString()} />
+              <Metric label="服务器时间（UTC）" value={formatUtc(health.data.timestamp)} />
               <Metric label="最近检测" value={health.checkedAt.toLocaleTimeString()} />
             </dl>
           </>
@@ -305,6 +305,16 @@ export function Settings() {
         ))}
     </section>
   )
+}
+
+/** ISO 时间戳 → `YYYY-MM-DD HH:mm UTC`：比 toUTCString 短一半，指标格里不会折成四行 */
+function formatUtc(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(
+    date.getUTCHours(),
+  )}:${pad(date.getUTCMinutes())} UTC`
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

@@ -21,7 +21,7 @@
 | 项 | 说明 |
 |---|---|
 | 安全响应头 | 新增纯 ASGI `SecurityHeadersMiddleware`：`X-Content-Type-Options`、`X-Frame-Options: DENY`、`Referrer-Policy`、`Permissions-Policy`、`Cross-Origin-Opener-Policy`、`CSP`，生产环境追加 `HSTS`。 |
-| CSP | `default-src 'self'`；脚本仅同源（构建产物无内联脚本）；样式/字体放行 Google Fonts。可用 `CONTENT_SECURITY_POLICY` 覆盖或置空关闭。 |
+| CSP | `default-src 'self'`；脚本仅同源（构建产物无内联脚本）；样式/字体放行 Google Fonts；`connect-src` 额外精确放行首屏玻璃立方体的 GLB 来源（`https://motionsites.org`，不写通配）。可用 `CONTENT_SECURITY_POLICY` 覆盖或置空关闭。 |
 | GZip 压缩 | 只对 `/assets` 静态挂载点启用 —— **不给全局加** `GZipMiddleware`，因为那会缓冲压缩 SSE 事件流。 |
 | 静态缓存策略 | `/assets/*`（内容哈希）→ `public, max-age=31536000, immutable`；`index.html` → `no-cache`。杜绝「部署后旧 HTML 指向已删 chunk → 白屏」。 |
 | 生产关闭 API 文档 | `API_DOCS_ENABLED=false` 时 `/api/docs`、`/api/openapi.json` 返回 404。 |
@@ -39,16 +39,16 @@
 ## 🔧 待办（P1，上线前后尽快）
 
 ### 前端
-- **字体来源风险**：当前从 `fonts.googleapis.com` 拉 Inter / Inter Tight / JetBrains Mono。国内网络对该域可能不可达或不稳定，且外链 CSS **阻塞首屏渲染**。建议二选一：
+- **字体来源风险**：当前从 `fonts.googleapis.com` 拉 Poppins（300–800，全站唯一字族，中文回落系统黑体）。国内网络对该域可能不可达或不稳定，且外链 CSS **阻塞首屏渲染**。建议二选一：
   1. 自托管 woff2（放 `public/fonts/` + `@font-face`），彻底消除外链；或
   2. 反正文字栈已有系统回退（思源黑体/苹方/等宽），直接移除外链、改用系统字体。
   > ⚠️ 改字体时**必须同时改两处**：`index.html` 的 `<link href="fonts.googleapis.com/...">`
-  > 外链，与 `tokens.css` 的 `--font-display` / `--font-body` / `--font-mono`。
+  > 外链，与 `styles/world.css` 的 `--font`（以及 `--mono`）。
   > 只改后者的话，外链还在拉旧字体、新字体从未下载，计算样式照样显示新字体名，
   > **实际渲染静默回退系统字体**，肉眼很难发现（探针 `probe-visual-theme.cjs`
   > 的「字体真被加载」断言就是为拦住这个而加的）。
-- **深色主题首屏闪烁**：深色用户刷新时先见浅色再切深色。彻底修复需在 `<head>` 内联极小脚本读 `localStorage` —— 但会与当前严格 CSP（`script-src 'self'`）冲突，需给该脚本加 `hash`/`nonce` 或放宽 CSP。
-- **视觉回归已有探针，a11y 仍缺**：配色/渐变/玻璃层/字体加载已由 `frontend/scripts/probe-visual-theme.cjs` 与 `probe-visual-zoom.cjs` 覆盖（双主题 + 对比度断言）；尚未接入 axe 等自动化可访问性扫描。
+- **首屏是 WebGL**：`index.html` 不含任何 3D 相关资源，three.js 只在概览页按需加载；模型加载失败或超过 8 秒会回落到程序化几何，首屏不会因此空白。若浏览器禁用 WebGL，`#scene` 保持黑底，标题与全部导航仍可用。
+- **视觉回归已有工具，a11y 仍缺**：结构与契约由 `frontend/scripts/smoke-render.mjs`（46 条，含类名覆盖率与 three.js 渲染管线）守住，逐页版式由 `shoot-world.cjs` 截图人工比对；尚未接入 axe 等自动化可访问性扫描。
 
 ### 后端
 - **长请求可能触发网关超时（重点）**：`POST /api/graph/research`、`POST /api/agent/run` 会**同步阻塞**直到整段流程跑完（研究图到「写报告前中断」为止，可能 30–120s）。若反向代理的读超时更短，代理会回一个 **HTML 错误页**（502/504）→ 前端看到「非 JSON 响应」。

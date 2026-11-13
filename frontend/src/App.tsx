@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, LazyMotion, domAnimation } from 'motion/react'
-import { ChevronDownIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon } from './components/icons'
+import { CloseIcon } from './components/icons'
 import { ToastHost } from './components/Toast'
 import { PageShell } from './components/PageShell'
 import { ScrollProgress } from './components/ScrollProgress'
@@ -10,8 +10,9 @@ import { TripleRingSpinner } from './components/TripleRingSpinner'
  * 页面级按需加载。
  *
  * 为什么用 React.lazy 而不是路由库：项目红线明确「不引入 react-router」。
- * 而 SPA 只有 8 个静态页面，本来也不需要路由 —— 用状态切页 + lazy 就够了。
- * 收益：首屏只下载「概览」相关的代码，报告/教程/设置等模块点开才加载。
+ * SPA 只有 8 个静态页面，本来也不需要路由 —— 状态切页 + lazy 足够。
+ * 首屏只下载「概览」（含 WebGL 立方体）相关代码，其余模块点开才加载；
+ * three.js 因为只被概览页引用，会被切成独立 chunk，不进其他页面的包。
  */
 const Dashboard = lazy(() =>
   import('./features/dashboard/Dashboard').then((m) => ({ default: m.Dashboard })),
@@ -22,21 +23,13 @@ const ResearchWorkflow = lazy(() =>
 const KnowledgeBase = lazy(() =>
   import('./features/knowledge/KnowledgeBase').then((m) => ({ default: m.KnowledgeBase })),
 )
-const RagLab = lazy(() =>
-  import('./features/rag/RagLab').then((m) => ({ default: m.RagLab })),
-)
-const Tutorial = lazy(() =>
-  import('./features/tutorial/Tutorial').then((m) => ({ default: m.Tutorial })),
-)
-const Reports = lazy(() =>
-  import('./features/reports/Reports').then((m) => ({ default: m.Reports })),
-)
+const RagLab = lazy(() => import('./features/rag/RagLab').then((m) => ({ default: m.RagLab })))
+const Tutorial = lazy(() => import('./features/tutorial/Tutorial').then((m) => ({ default: m.Tutorial })))
+const Reports = lazy(() => import('./features/reports/Reports').then((m) => ({ default: m.Reports })))
 const Evaluation = lazy(() =>
   import('./features/evaluation/Evaluation').then((m) => ({ default: m.Evaluation })),
 )
-const Settings = lazy(() =>
-  import('./features/settings/Settings').then((m) => ({ default: m.Settings })),
-)
+const Settings = lazy(() => import('./features/settings/Settings').then((m) => ({ default: m.Settings })))
 
 /** 空闲时预热「深度研究」（推荐入口），消掉首次点击的加载感 */
 function usePrefetchPrimaryPage() {
@@ -51,117 +44,67 @@ function usePrefetchPrimaryPage() {
   }, [])
 }
 
-/**
- * 顶栏导航 + 内容区。
- *
- * 响应式（纯 CSS 断点，除抽屉开合外无额外状态）：
- *  - ≥1200px：组标签可见，10 项平铺在 4 组内；
- *  - 1024–1199px：隐藏组标签，只留组间竖线；
- *  - 768–1023px：顶栏只留 NAV_CORE_KEYS 三项 +「更多」下拉（4 组标题 + 全部 10 项）；
- *  - <768px：汉堡按钮 + 移动抽屉（唯一的 navOpen state，10 项 + 4 组标题）。
- */
-
-/* ===================== 导航数据结构（S1 / §2.1） ===================== */
+/* ===================== 导航数据 ===================== */
 
 export type PageKey =
-  | 'dashboard' | 'workflow' | 'knowledge' | 'rag'
-  | 'reports' | 'evaluation' | 'settings' | 'tutorial'
-
-/** 视觉层级：家 / 主推 / 次（开发者向也用次） */
-export type NavTier = 'home' | 'primary' | 'secondary'
+  | 'dashboard'
+  | 'workflow'
+  | 'knowledge'
+  | 'rag'
+  | 'reports'
+  | 'evaluation'
+  | 'settings'
+  | 'tutorial'
 
 export interface NavItem {
   key: PageKey
-  /** 导航显示文案（唯一可改名的地方） */
+  /** 导航显示文案 */
   label: string
-  /** 视觉层级 */
-  tier: NavTier
-  /** 推荐角标（只有 workflow 为 true） */
-  recommend?: boolean
-  /** 命令面板 / 抽屉的补充说明（可选） */
-  hint?: string
+  /** 目录里的英文名，与中文名一起构成双语条目 */
+  en: string
 }
 
-export interface NavGroup {
-  id: 'home' | 'research' | 'results' | 'system'
-  /** 组标签文案；'home' 为空字符串（顶栏不渲染标签，见 Q2） */
-  label: string
-  items: NavItem[]
-}
-
-export const NAV_GROUPS: NavGroup[] = [
-  { id: 'home', label: '', items: [
-    { key: 'dashboard', label: '概览', tier: 'home' },
-  ]},
-  { id: 'research', label: '研究', items: [
-    { key: 'workflow', label: '深度研究', tier: 'primary', recommend: true, hint: '推荐入口' },
-    { key: 'knowledge', label: '知识库', tier: 'secondary' },
-    { key: 'rag', label: 'RAG 流程', tier: 'secondary', hint: '可视化' },
-  ]},
-  { id: 'results', label: '结果', items: [
-    { key: 'reports', label: '研究报告', tier: 'secondary' },
-    { key: 'evaluation', label: '效果评估', tier: 'secondary', hint: '开发者向' },
-  ]},
-  { id: 'system', label: '系统', items: [
-    { key: 'settings', label: '系统设置', tier: 'secondary', hint: '开发者向' },
-    { key: 'tutorial', label: '使用教程', tier: 'secondary' },
-  ]},
+/** 顶栏只放三个高频入口；其余全部收到目录里，保持导航只有一行 */
+export const NAV_PRIMARY: NavItem[] = [
+  { key: 'dashboard', label: '概览', en: 'Overview' },
+  { key: 'workflow', label: '深度研究', en: 'Research' },
+  { key: 'knowledge', label: '知识库', en: 'Library' },
 ]
 
-/** 扁平索引：保持 NAV_ITEMS 的既有用法（navigate() 查找等）不变 */
-export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items)
+export const NAV_ITEMS: NavItem[] = [
+  { key: 'dashboard', label: '概览', en: 'Overview' },
+  { key: 'workflow', label: '深度研究', en: 'Deep Research' },
+  { key: 'knowledge', label: '知识库', en: 'Knowledge Base' },
+  { key: 'rag', label: 'RAG 流程', en: 'Retrieval Lab' },
+  { key: 'reports', label: '研究报告', en: 'Reports' },
+  { key: 'evaluation', label: '效果评估', en: 'Evaluation' },
+  { key: 'settings', label: '系统设置', en: 'Settings' },
+  { key: 'tutorial', label: '使用教程', en: 'Guide' },
+]
 
-/**
- * 768–1023px 顶栏保留项。不在本列表中的组，在该档位整组不渲染。
- * ⚠️ M7：严格等于 ['dashboard','workflow','reports']，不要增删。
- */
-const NAV_CORE_KEYS: PageKey[] = ['dashboard', 'workflow', 'reports']
-
-/**
- * 抽屉是「全量说明」场景，家的组标签也要出（NAV_GROUPS 里 home.label 为空字符串）。
- * 见 §2.1 Q2 与 §2.5。
- */
-const DRAWER_GROUP_LABEL: Partial<Record<NavGroup['id'], string>> = { home: '概览' }
-
-/* 图标统一见 src/components/icons.tsx（§5.1 B1）：本文件不再自行声明 svg 图标 */
-
-/* ===================== 会话内页面记忆（§2.6） ===================== */
+/* ===================== 会话内页面记忆 ===================== */
 
 const PAGE_KEY = 'arw-page'
 /** 白名单：只有 NAV_ITEMS 里出现过的 key 才可被恢复，避免存储被篡改后落到陌生页 */
 const PAGE_KEYS: PageKey[] = NAV_ITEMS.map((i) => i.key)
 
-/** 读取：非法值一律回落 'dashboard'，绝不信任存储内容 */
 function readStoredPage(): PageKey {
   try {
     const v = sessionStorage.getItem(PAGE_KEY)
     return v && (PAGE_KEYS as string[]).includes(v) ? (v as PageKey) : 'dashboard'
   } catch {
-    // 隐私模式 / 禁用存储
     return 'dashboard'
   }
 }
 
-/**
- * 从 URL hash（`#/workflow`）解析页面：让页面可刷新、可分享、可后退。
- *
- * 为什么用 hash 而不是引入路由库：项目红线是「不引入 react-router」，
- * 而 8 个静态页面只需要一个「当前页」标识 —— hash 零依赖，且天然兼容
- * 后端的 SPA fallback（任何路径都回落 index.html）。非法值返回 null。
- */
+/** `#/workflow` → 页面；非法值返回 null */
 function readHashPage(): PageKey | null {
   const raw = window.location.hash.replace(/^#\/?/, '')
   const page = raw.split('?')[0]
   return page && (PAGE_KEYS as string[]).includes(page) ? (page as PageKey) : null
 }
 
-/**
- * 从 URL hash 解析「要打开哪一次运行」：`#/reports?thread=thread_xxx`。
- *
- * [F11] 效果评估页的「最近运行」需要能跳到具体某一次运行 ——
- * 但只有页面标识不足以表达「打开哪一条」，所以给 hash 加一个可选的 thread 参数。
- * 这样链接可分享、可刷新、可后退，和既有的「hash 即状态」设计一致，依然零依赖。
- */
+/** `#/reports?thread=xxx` → 要打开哪一次运行 */
 function readHashThread(): string | null {
   const raw = window.location.hash.replace(/^#\/?/, '')
   const queryStart = raw.indexOf('?')
@@ -170,73 +113,23 @@ function readHashThread(): string | null {
   return thread && thread.trim() ? thread.trim() : null
 }
 
-/** 跨页跳转用的导航签名：可选的 threadId 表示「并且打开这一次运行」 */
 export type NavigateFn = (key: string, threadId?: string) => void
-
-/* ===================== 共用的导航项渲染（§2.5） ===================== */
-
-interface NavLinkButtonProps {
-  item: NavItem
-  page: PageKey
-  /** 是否标记 data-core="true"（决定 768–1023 档位顶栏是否保留） */
-  core: boolean
-  onNavigate: (key: string) => void
-}
-
-/** 三个容器（顶栏 / 更多下拉 / 抽屉）共用同一份渲染，零分支 */
-function NavLinkButton({ item, page, core, onNavigate }: NavLinkButtonProps) {
-  const active = item.key === page
-  const cls = [
-    'nav-link',
-    item.tier === 'primary' ? 'nav-link--primary' : '',
-    item.key === 'evaluation' || item.key === 'settings' ? 'nav-link--dev' : '',
-    active ? 'nav-link--active' : '',
-  ].filter(Boolean).join(' ')
-
-  return (
-    <button
-      type="button"
-      className={cls}
-      data-core={core ? 'true' : 'false'}
-      aria-current={active ? 'page' : undefined}
-      onClick={() => onNavigate(item.key)}
-    >
-      {item.label}
-      {item.recommend && <span className="nav-link__badge">推荐</span>}
-      {item.hint && <span className="nav-link__hint">{item.hint}</span>}
-    </button>
-  )
-}
 
 /* ===================== App ===================== */
 
 export default function App() {
-  // 初始页：优先 URL hash（分享链接 / 刷新），其次 sessionStorage（会话内记忆）；
-  // 写入统一放在 effect 里，避免首帧把 'dashboard' 写回去
   const [page, setPage] = useState<PageKey>(() => readHashPage() ?? readStoredPage())
-  // [F11] 深链目标：`#/reports?thread=xxx` 要求目标页打开这一次运行
   const [focusThread, setFocusThread] = useState<string | null>(() => readHashThread())
-  const [theme, setTheme] = useState<'light' | 'dark'>(
-    () => (localStorage.getItem('arw-theme') as 'light' | 'dark') || 'light',
-  )
   const [scrolled, setScrolled] = useState(false)
+  const [indexOpen, setIndexOpen] = useState(false)
   usePrefetchPrimaryPage()
-  // 唯一的 UI 状态：移动端抽屉开合
-  const [navOpen, setNavOpen] = useState(false)
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme
-    localStorage.setItem('arw-theme', theme)
-  }, [theme])
-
-  // 页面记忆双写（§2.6 扩展）：sessionStorage 负责会话内恢复，
-  // URL hash 负责刷新 / 分享 / 后退 —— 用 pushState 而非改 location.hash，
-  // 既不触发 hashchange（避免与下面的监听自回环），又能留下后退历史。
+  // 页面记忆双写：sessionStorage 负责会话内恢复，hash 负责刷新 / 分享 / 后退
   useEffect(() => {
     try {
       sessionStorage.setItem(PAGE_KEY, page)
     } catch {
-      // 存储被禁用时静默降级
+      /* 存储被禁用时静默降级 */
     }
     const target = focusThread
       ? `#/${page}?thread=${encodeURIComponent(focusThread)}`
@@ -246,7 +139,6 @@ export default function App() {
     }
   }, [page, focusThread])
 
-  // 浏览器后退/前进（popstate）与手动改 hash（hashchange）：一律跟随 URL
   useEffect(() => {
     const syncFromHash = () => {
       const fromHash = readHashPage()
@@ -268,223 +160,155 @@ export default function App() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  // 抽屉开启时：锁定 body 滚动 + Esc 关闭；视口放大回桌面档时自动收起（避免滚动锁残留）
+  // 目录打开时锁滚动 + Esc 关闭
   useEffect(() => {
-    if (!navOpen) return
-    const prevOverflow = document.body.style.overflow
+    if (!indexOpen) return
+    const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setNavOpen(false)
-    }
-    const mq = window.matchMedia('(min-width: 768px)')
-    const onViewportChange = () => {
-      if (mq.matches) setNavOpen(false)
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIndexOpen(false)
     }
     window.addEventListener('keydown', onKeyDown)
-    mq.addEventListener('change', onViewportChange)
-
     return () => {
-      document.body.style.overflow = prevOverflow
+      document.body.style.overflow = prev
       window.removeEventListener('keydown', onKeyDown)
-      mq.removeEventListener('change', onViewportChange)
     }
-  }, [navOpen])
+  }, [indexOpen])
 
-  /** 深链目标已处理完：清掉它（同时把 URL 里的 ?thread= 去掉） */
   const clearFocusThread = useCallback(() => setFocusThread(null), [])
 
-  /**
-   * 切换页面。
-   *
-   * [F11] 第二个参数 threadId：带上它表示「跳到该页面并打开这一次运行」
-   * （效果评估页的最近运行列表就是靠它实现「点一条 → 直接看到那条」）。
-   * 不传即普通导航，同时清掉上一次的深链目标，避免旧目标在新页面上残留生效。
-   */
   const navigate: NavigateFn = (key, threadId) => {
     const item = NAV_ITEMS.find((i) => i.key === key)
-    if (item) {
-      setPage(item.key)
-      setFocusThread(threadId ?? null)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    }
+    if (!item) return
+    setPage(item.key)
+    setFocusThread(threadId ?? null)
+    setIndexOpen(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-
-  /** 抽屉内点击后：导航并收起抽屉 */
-  const navigateAndClose = (key: string) => {
-    navigate(key)
-    setNavOpen(false)
-  }
-
-  /** 该组是否含 core 项（顶栏整组跳过，避免出现「空组 + 空竖线」） */
-  const hasCore = (group: NavGroup) => group.items.some((item) => NAV_CORE_KEYS.includes(item.key))
 
   return (
     <LazyMotion features={domAnimation} strict>
-    <div className="site-shell">
-      <header className="global-nav" data-scrolled={scrolled}>
-        <div className="nav-inner">
+      <div className="site-shell">
+        <header className="nav" data-scrolled={scrolled}>
           <a
-            className="nav-brand"
-            href="#"
-            onClick={(e) => {
-              e.preventDefault()
+            className="logo"
+            href="#/dashboard"
+            aria-label="回到概览"
+            onClick={(event) => {
+              event.preventDefault()
               navigate('dashboard')
             }}
           >
-            <span className="nav-logo">ARW</span>
-            AI 研究工作台
+            <i className="logo-mark" aria-hidden="true" />
+            <b>Research</b>
+            <span>Workspace</span>
           </a>
 
-          {/* ≥768px 顶栏：渲染全部分组；含 core 项的组打 data-core="true"、整组无 core 的组
-              （如「系统」）打 data-has-core="false"，由 responsive.css 在 ≤1023px 隐藏其整组，
-              避免「空组 + 孤立竖线」。≤1023px 非 core 单项也隐藏，仅留 core 三项 + 「更多」下拉。
-              「更多」下拉始终渲染全部 9 项，确保 768–1023px 仍可到达系统设置 / 教程。
-              注意：≥1024px 时整组都渲染（含系统组），否则桌面端将完全无法访问设置/教程。 */}
-          <nav className="nav-menu" aria-label="主导航">
-            {NAV_GROUPS.map((group) => (
-              <div
-                className="nav-group"
-                data-group={group.id}
-                data-has-core={hasCore(group) ? 'true' : 'false'}
-                key={group.id}
-              >
-                {group.label && (
-                  <span className="nav-group__label" aria-hidden="true">{group.label}</span>
-                )}
-                {group.items.map((item) => (
-                  <NavLinkButton
-                    key={item.key}
-                    item={item}
-                    page={page}
-                    core={NAV_CORE_KEYS.includes(item.key)}
-                    onNavigate={navigate}
-                  />
-                ))}
-              </div>
+          <ul className="nav-links">
+            {NAV_PRIMARY.map((item) => (
+              <li key={item.key}>
+                <a
+                  className="nav-link"
+                  href={`#/${item.key}`}
+                  data-active={page === item.key ? 'true' : 'false'}
+                  aria-current={page === item.key ? 'page' : undefined}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    navigate(item.key)
+                  }}
+                >
+                  {item.label}
+                </a>
+              </li>
             ))}
-          </nav>
+            <li data-optional="true">
+              <button
+                className="nav-index"
+                type="button"
+                onClick={() => setIndexOpen(true)}
+                aria-expanded={indexOpen}
+                aria-controls="site-index"
+              >
+                <span aria-hidden="true" />
+                目录
+              </button>
+            </li>
+          </ul>
+        </header>
 
-          {/* 平板档（768–1023px）「更多」下拉：纯 CSS 展开，无 state。
-              内部按组展示全部 9 项（含组标题），是用户第一次学到分组心智的地方。 */}
-          <div className="nav-more">
-            <button className="nav-link nav-more__btn" type="button" aria-haspopup="true">
-              更多
-              <span className="nav-more__caret" aria-hidden="true"><ChevronDownIcon /></span>
-            </button>
-            <div className="nav-more__menu">
-              <nav className="nav-more__groups" aria-label="更多导航">
-                {NAV_GROUPS.map((group) => (
-                  <div className="nav-more__group" key={group.id}>
-                    <div className="nav-more__label" aria-hidden="true">{group.label || DRAWER_GROUP_LABEL[group.id] || ''}</div>
-                    {group.items.map((item) => (
-                      <NavLinkButton
-                        key={item.key}
-                        item={item}
-                        page={page}
-                        core={false}
-                        onNavigate={navigate}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </nav>
-            </div>
-          </div>
-
-          <div className="nav-actions">
-            <button
-              className="nav-icon"
-              type="button"
-              aria-label={theme === 'light' ? '切换到深色外观' : '切换到浅色外观'}
-              onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-            >
-              {theme === 'light' ? <MoonIcon size={17} /> : <SunIcon size={17} />}
-            </button>
-
-            <button
-              className="nav-toggle"
-              type="button"
-              aria-label="打开导航菜单"
-              aria-expanded={navOpen}
-              aria-controls="nav-drawer"
-              onClick={() => setNavOpen(true)}
-            >
-              <MenuIcon size={18} />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* 移动抽屉（<768px 才会被打开；纯 CSS 断点控制显隐，无额外状态） */}
-      {navOpen && (
-        <div className="nav-drawer-layer">
-          <button className="nav-scrim" type="button" aria-label="关闭导航菜单" onClick={() => setNavOpen(false)} />
-          <aside id="nav-drawer" className="nav-drawer" role="dialog" aria-modal="true" aria-label="主导航">
-            <div className="nav-drawer__head">
-              <span className="nav-drawer__title">导航</span>
-              <button className="nav-icon" type="button" aria-label="关闭" onClick={() => setNavOpen(false)}>
-                <CloseIcon size={18} />
+        {indexOpen && (
+          <div className="index-layer" id="site-index" role="dialog" aria-modal="true" aria-label="全站目录">
+            <div className="index-layer__head">
+              <span className="logo">
+                <i className="logo-mark" aria-hidden="true" />
+                <b>Research</b>
+                <span>Workspace</span>
+              </span>
+              <button
+                className="index-layer__close"
+                type="button"
+                aria-label="关闭目录"
+                onClick={() => setIndexOpen(false)}
+              >
+                <CloseIcon size={17} />
               </button>
             </div>
-            {NAV_GROUPS.map((group) => (
-              <div className="nav-drawer__group" key={group.id}>
-                <div className="nav-drawer__label">
-                  {group.label || DRAWER_GROUP_LABEL[group.id] || ''}
-                </div>
-                {group.items.map((item) => (
-                  <NavLinkButton
-                    key={item.key}
-                    item={item}
-                    page={page}
-                    core={false}
-                    onNavigate={navigateAndClose}
-                  />
-                ))}
-              </div>
-            ))}
-          </aside>
-        </div>
-      )}
 
-      <ScrollProgress />
+            <ul className="index-list">
+              {NAV_ITEMS.map((item, i) => (
+                <li key={item.key}>
+                  <button className="index-item" type="button" onClick={() => navigate(item.key)}>
+                    <span className="index-item__no">{String(i + 1).padStart(2, '0')}</span>
+                    <span className="index-item__label">{item.label}</span>
+                    <span className="index-item__en">{item.en}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
 
-      <main className="main">
-        {/* AnimatePresence + key：切页时先播离场再播入场，避免两页内容重叠闪烁 */}
-        <AnimatePresence mode="wait" initial={false}>
-          <PageShell key={page}>
-            <div className="shell shell--tight">
-              <Suspense
-                fallback={
-                  <div className="loading-stage" role="status" aria-label="正在加载模块…">
-                    <TripleRingSpinner size={64} />
-                    <span className="loading-stage__label">正在加载模块…</span>
-                  </div>
-                }
-              >
-                {page === 'dashboard' && <Dashboard onNavigate={navigate} />}
-                {page === 'workflow' && <ResearchWorkflow focusThread={focusThread} />}
-                {page === 'knowledge' && <KnowledgeBase onNavigate={navigate} />}
-                {page === 'rag' && <RagLab />}
-                {page === 'tutorial' && <Tutorial onNavigate={navigate} />}
-                {page === 'reports' && (
-                  <Reports
-                    focusThread={focusThread}
-                    onFocusConsumed={clearFocusThread}
-                    onOpenReport={(threadId) => navigate('reports', threadId)}
-                  />
-                )}
-                {page === 'evaluation' && <Evaluation onNavigate={navigate} />}
-                {page === 'settings' && <Settings />}
-              </Suspense>
+            <div className="index-layer__foot">
+              <span>AI Research Workspace</span>
+              <span>Seven steps · Every source traceable</span>
             </div>
-          </PageShell>
-        </AnimatePresence>
-      </main>
+          </div>
+        )}
 
-      {/* 全局轻提示：任何模块一行 notify() 即可给出操作反馈 */}
-      <ToastHost />
-    </div>
+        <ScrollProgress />
+
+        <main className="main">
+          <AnimatePresence mode="wait" initial={false}>
+            <PageShell key={page}>
+              <div className={page === 'dashboard' ? 'shell shell--full' : 'shell shell--tight'}>
+                <Suspense
+                  fallback={
+                    <div className="loading-stage" role="status" aria-label="正在加载模块…">
+                      <TripleRingSpinner size={64} />
+                      <span className="loading-stage__label">正在加载模块…</span>
+                    </div>
+                  }
+                >
+                  {page === 'dashboard' && <Dashboard onNavigate={navigate} />}
+                  {page === 'workflow' && <ResearchWorkflow focusThread={focusThread} />}
+                  {page === 'knowledge' && <KnowledgeBase onNavigate={navigate} />}
+                  {page === 'rag' && <RagLab />}
+                  {page === 'tutorial' && <Tutorial onNavigate={navigate} />}
+                  {page === 'reports' && (
+                    <Reports
+                      focusThread={focusThread}
+                      onFocusConsumed={clearFocusThread}
+                      onOpenReport={(threadId) => navigate('reports', threadId)}
+                    />
+                  )}
+                  {page === 'evaluation' && <Evaluation onNavigate={navigate} />}
+                  {page === 'settings' && <Settings />}
+                </Suspense>
+              </div>
+            </PageShell>
+          </AnimatePresence>
+        </main>
+
+        <ToastHost />
+      </div>
     </LazyMotion>
   )
 }

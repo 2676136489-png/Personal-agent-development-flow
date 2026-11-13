@@ -69,6 +69,9 @@ frontend/.probe-visual/
 .probe-visual/
 frontend/.probe-rag/
 .probe-rag/
+# 新版视觉探针（shoot-world / probe-world-interact）的截图目录
+frontend/.probe-world/
+.probe-world/
 
 # 面试准备材料仅本地留存，不入库
 docs/interview/

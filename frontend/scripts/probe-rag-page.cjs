@@ -85,7 +85,7 @@ const METRICS = `(() => {
     href: location.href,
     loaded: !!(root && root.childElementCount > 0),
     skeleton: !!document.querySelector('.skeleton'),
-    theme: document.documentElement.getAttribute('data-theme'),
+    theme: 'single-black',
     segments: all('.rag-ruler__seg').length,
     overlaps: all('.rag-ruler__overlap').length,
     chunkCards: all('.rag-chunk').length,
@@ -430,17 +430,9 @@ async function main() {
     })
     fs.writeFileSync(path.join(OUT, 'rag-light.png'), Buffer.from(lightShot.data, 'base64'))
 
-    /* ---------- 3. 深色主题 ---------- */
-    await evaluate(cdp, "document.documentElement.setAttribute('data-theme','dark')")
-    await sleep(500)
-    report.steps.push({ name: 'dark', ...(await evaluate(cdp, METRICS)) })
-    const darkShot = await cdp.send('Page.captureScreenshot', {
-      format: 'png',
-      captureBeyondViewport: true,
-    })
-    fs.writeFileSync(path.join(OUT, 'rag-dark.png'), Buffer.from(darkShot.data, 'base64'))
-
-    await evaluate(cdp, "document.documentElement.setAttribute('data-theme','light')")
+    /* ---------- 3. 换肤步骤已退役：全站只有一套纯黑主题 ----------
+       原设计有浅色 / 深色两套令牌，探针在这一步切 data-theme 验证配色；
+       现在没有第二套主题可切，这一步整体删掉，避免「探针绿了但什么也没测」。 */
 
     /* ---------- 4. 知识库页：展开片段 ---------- */
     await cdp.send('Page.navigate', { url: pageUrl('#/knowledge') })
@@ -470,7 +462,6 @@ async function main() {
     const before = report.steps.find((s) => s.name === 'before-run')
     const after = report.steps.find((s) => s.name === 'after-run')
     const recursive = report.steps.find((s) => s.name === 'recursive-run')
-    const dark = report.steps.find((s) => s.name === 'dark')
     const knowledge = report.steps.find((s) => s.name === 'knowledge')
     const fail = []
     const expect = (cond, msg) => {
@@ -520,7 +511,7 @@ async function main() {
       `递归切分下没有画出重叠区：${recursive?.segments} 段 / ${recursive?.overlaps} 处重叠`,
     )
     expect(!after?.overflowX, `RAG 页横向溢出 ${after?.scrollW}>${after?.innerW}`)
-    expect(dark?.theme === 'dark' && dark?.bodyBg !== after?.bodyBg, '深色主题没有生效')
+    expect(after?.bodyBg === 'rgb(0, 0, 0)', `主背景不是纯黑：${after?.bodyBg}`)
     expect(knowledge?.chunkPanel.chunks > 0, '知识库页没有展开出片段')
     expect(!report.consoleErrors.length, `控制台有错误：${report.consoleErrors.join(' | ')}`)
 

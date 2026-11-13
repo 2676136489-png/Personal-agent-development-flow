@@ -38,6 +38,10 @@ export default defineConfig({
           ) {
             return 'vendor-motion'
           }
+          // three.js：只有概览页的玻璃立方体需要，单独成块后其余页面完全不下载
+          if (id.includes('/three/')) {
+            return 'vendor-three'
+          }
           // markdown 走 unified 生态（micromark / remark / rehype / mdast…），
           // 只有看报告时才需要，独立成块才能被真正按需加载
           if (
@@ -57,7 +61,8 @@ export default defineConfig({
         },
       },
     },
-    // 分包后单块会小很多，阈值放宽到 400KB，避免噪音告警
-    chunkSizeWarningLimit: 400,
+    // 分包后单块会小很多；three.js 本身 568KB（gzip 145KB）无法再拆，
+    // 阈值放到 600KB，让告警只在真的出现新的超大块时才有意义
+    chunkSizeWarningLimit: 600,
   },
 })

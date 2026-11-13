@@ -77,10 +77,11 @@ export function VectorHeatmap({ detail }: { detail: RagEmbedDetail }) {
   const { heatmap } = detail
   const cell = (value: number) => {
     const alpha = Math.min(1, Math.abs(value))
-    // 正数用电光蓝、负数用青蓝：两端都是主题里的强调色，明暗主题下都能看清
+    // 黑白设计系统里不再用蓝/青区分正负：正值给不透明白，负值给半透明白。
+    // 靠方向不同的透明度仍然能看出「哪半边是负的」，同时不引入主色。
     return value >= 0
-      ? `rgba(37, 99, 235, ${0.06 + alpha * 0.9})`
-      : `rgba(14, 116, 144, ${0.06 + alpha * 0.9})`
+      ? `rgba(255, 255, 255, ${0.08 + alpha * 0.82})`
+      : `rgba(255, 255, 255, ${0.04 + alpha * 0.34})`
   }
   return (
     <div className="rag-heatmap-wrap">
@@ -101,7 +102,7 @@ export function VectorHeatmap({ detail }: { detail: RagEmbedDetail }) {
       </div>
       <p className="rag-figure__note rag-heatmap__note">
         每行一个块，取前 {heatmap.cols} 维（共 {detail.dims} 维，绝对值上限 {heatmap.scale}）。
-        蓝 = 正值，青 = 负值，越深越远离 0。
+        亮 = 正值，暗 = 负值，越亮越远离 0。
         {heatmap.total_chunks > heatmap.rows && ` 只画了前 ${heatmap.rows} 块。`}
       </p>
     </div>

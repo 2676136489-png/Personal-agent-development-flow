@@ -10,7 +10,7 @@
 
 打开就能用，无需配置环境：模型接智谱 GLM-4-Flash，联网检索接 Tavily。线上是单端口托管——前端产物由 FastAPI 一起提供，`/` 是页面、`/api/*` 是接口。
 
-![概览页](docs/images/overview-light.jpg)
+![概览页](docs/images/overview.jpg)
 
 8 个模块均可用（概览 / 深度研究 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程），后端 256 个测试通过。架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)，项目整体说明与关键设计取舍见 [`PROJECT.md`](PROJECT.md)。
 
@@ -54,11 +54,11 @@ END
 |---|---|
 | ![RAG 流程](docs/images/rag-lab.jpg) | ![研究报告](docs/images/reports.jpg) |
 
-界面是冷调深空蓝，浅色与深色两套主题，配色不靠肉眼定——每个前景/背景组合的对比度都先算再选值（浅底正文 ≥5.0:1，深底 ≥6.5:1）。主题色全部集中在 `styles/tokens.css`，业务 CSS 里只剩十来处渐变遮罩的技术性硬编码，换主题只改令牌。
+首屏是一个用 three.js 实时渲染的玻璃立方体。背景那三行大标题不是 HTML 文字，而是先画进离屏 canvas、再作为纹理交给着色器采样——立方体按六段不同的折射率分别偏移采样坐标，透过去看到的文字就被放大、镜像，并拆出蓝黄边；倒角还靠菲涅尔反射勾出一圈白边。拖动可以旋转（松手带惯性），静置 0.6 秒后接回缓慢自转，左右箭头是 90° 吸附。
 
-深色主题：
+视觉语言只保留黑白两色：Poppins 300–800、1.5px 描边、2px 圆角、全站不用阴影。颜色只留给状态（完成 / 失败 / 警示），其余层级全部由字重、字距和留白表达。设计系统拆成两个文件：`styles/world.css` 放全站语法（排版 / 按钮 / 表单 / 卡片 / 状态 / 导航），`styles/world-pages.css` 放各页面版面，两者都不含业务逻辑。
 
-![深色概览](docs/images/overview-dark.jpg)
+> 首屏那个模型由浏览器直接从设计稿指定的地址拉取；CSP 只放行这一个域名，不写成 `https:` 通配。加载失败时回落到 `RoundedBoxGeometry`，首屏不会因此空掉。
 
 ---
 
@@ -90,7 +90,8 @@ frontend/src/
 ├── components/             通用组件（步骤条、时间线、证据面板、Toast…）
 ├── api/                    唯一 HTTP 出口（SSE 与轮询共用同一条数据链路）
 └── styles/                 设计令牌 + 分层样式
-    ├── tokens.css          唯一颜色来源（明暗双主题 + 渐变/发光/玻璃令牌）
+    ├── world.css           设计系统：令牌 + 排版 + 按钮/表单/卡片/状态 + 导航 + 首屏
+    ├── world-pages.css     各页面版面（首页入口 / 知识库 / 设置 / 报告 / 教程 / RAG）
     ├── base.css            reset / 焦点环 / 页面转场
     ├── layout.css          壳层 / 容器 / 栅格
     ├── components.css      可复用组件
@@ -200,12 +201,13 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 | 6 | 静态检查 | `.venv/Scripts/python -m ruff check app tests` | `All checks passed!` |
 | 7 | 前端类型 | `npm run typecheck` | 无输出 |
 | 8 | 布局与跳转 | `frontend/scripts/` 下的 CDP 探针脚本 | 元素几何 / 跳转落地状态符合断言 |
-| 9 | 视觉与可读性 | `node scripts/probe-visual-theme.cjs <地址> ""` | 双主题令牌 / 渐变 / 玻璃层 / 字体加载断言全绿 |
+| 9 | 渲染冒烟 | `node scripts/smoke-render.mjs` | 46 条结构与契约断言（含 three.js 渲染管线、类名覆盖率）|
+| 10 | 视觉截图 | `node scripts/shoot-world.cjs <地址> dashboard,workflow` | 逐页截图落到 `.probe-world/`，用于人工比对版面 |
 | 10 | 细节点与对比度 | `node scripts/probe-visual-zoom.cjs <地址> dark` | hover 态对比度 ≥4.5:1、网格落到像素 |
 | 11 | RAG 实验台 | `node scripts/probe-rag-page.cjs <地址>` | 四条横区按序堆叠、每区「选项在左 / 详情在右」、详情含官方文档链接、回显正确、五张图齐、色带段数=块卡片数、斜纹重叠>0、倒排索引有词与块号且索引落盘出两个文件、无横向溢出 |
 | 12 | 文档截图 | `node scripts/docs-screenshots.cjs <地址>` | `docs/images/` 下 6 张首屏图，页面已渲染完（非骨架屏） |
 
-配色不靠肉眼定：`tokens.css` 里每个前景/背景组合的对比度都是脚本实测的
+配色不靠肉眼定：`world.css` 里文字与底的组合都按 WCAG 2.1 取值（正文 ≥ 4.5:1）
 （浅底正文 ≥5.0:1，深底 ≥6.5:1）。第 9/10 项针对的是「改了样式但没真生效」——
 渐变被高优先级规则盖掉、字体声明了却没下载，这些光看计算样式发现不了，得进真浏览器。
 

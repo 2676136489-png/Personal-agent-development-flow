@@ -70,19 +70,19 @@ function connect(wsUrl) {
   }
 }
 
-/* 要截的页面。route 为空表示首页；theme 决定明暗。
+/* 要截的页面。route 为空表示首页。
+   ⚠️ 已经没有明暗两套主题：全站只有纯黑一套，所以 theme 字段整体删掉。
    路由名见 App.tsx 的 NAV_GROUPS：workflow=深度研究、rag=RAG 流程。
    prepare 是截图前要先跑的一段脚本（如 RAG 页要先真跑一次链路），
    waitFor 是等它出现的选择器，scrollY 返回要滚到的位置 —— 首屏缺省为 0。 */
 const SHOTS = [
-  { file: 'overview-light.jpg', route: '', theme: 'light', wait: 3200 },
-  { file: 'overview-dark.jpg', route: '', theme: 'dark', wait: 3200 },
-  { file: 'research-workflow.jpg', route: 'workflow', theme: 'light', wait: 3600 },
-  { file: 'knowledge-base.jpg', route: 'knowledge', theme: 'light', wait: 3000 },
+  /* 首页多等一会儿：玻璃立方体要下载 GLB、等字体就绪后才开始渲染 */
+  { file: 'overview.jpg', route: '', wait: 5200 },
+  { file: 'research-workflow.jpg', route: 'workflow', wait: 3600 },
+  { file: 'knowledge-base.jpg', route: 'knowledge', wait: 3000 },
   {
     file: 'rag-lab.jpg',
     route: 'rag',
-    theme: 'light',
     wait: 2000,
     prepare: "document.querySelector('.rag-run__btn')?.click()",
     waitFor: '.rag-report',
@@ -93,7 +93,7 @@ const SHOTS = [
       return fig ? fig.getBoundingClientRect().top + window.scrollY - 92 : 0
     })()`
   },
-  { file: 'reports.jpg', route: 'reports', theme: 'light', wait: 3000 }
+  { file: 'reports.jpg', route: 'reports', wait: 3000 }
 ]
 
 async function main() {
@@ -101,7 +101,9 @@ async function main() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'docshot-'))
   const child = spawn(CHROME, [
     '--headless=new', `--remote-debugging-port=${PORT}`,
-    '--no-sandbox', '--no-first-run', '--no-default-browser-check', '--disable-gpu',
+    '--no-sandbox', '--no-proxy-server', '--no-first-run', '--no-default-browser-check',
+    /* 首屏是 WebGL：不能 --disable-gpu，用 SwiftShader 软件光栅化保证 headless 能出图 */
+    '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
     `--user-data-dir=${profile}`, '--window-size=1440,900', '--hide-scrollbars',
     '--force-device-scale-factor=1', 'about:blank'
   ], { stdio: 'ignore' })
@@ -139,9 +141,6 @@ async function main() {
       }
       if (!ready) { console.warn(`⚠️ ${shot.file} 等待渲染超时，跳过`); continue }
 
-      await cdp.send('Runtime.evaluate', {
-        expression: `document.documentElement.setAttribute('data-theme','${shot.theme}')`
-      })
       await cdp.send('Runtime.evaluate', {
         expression: `document.fonts.ready.then(() => new Promise(r => setTimeout(r, 400)))`,
         awaitPromise: true
@@ -182,7 +181,7 @@ async function main() {
       const file = path.join(OUT, shot.file)
       fs.writeFileSync(file, Buffer.from(data.data, 'base64'))
       const kb = (Buffer.from(data.data, 'base64').length / 1024).toFixed(0)
-      console.log(`📸 ${shot.file}  1440×900  ${kb} KB  (${shot.theme} ${shot.route || '/'})`)
+      console.log(`📸 ${shot.file}  1440×900  ${kb} KB  (${shot.route || '/'})`)
     }
   } finally {
     child.kill()
