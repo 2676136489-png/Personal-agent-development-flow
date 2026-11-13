@@ -21,6 +21,9 @@ const CHROME =
   'C:/Users/111/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe'
 const PORT = Number(process.env.PROBE_PORT || 9341)
 const BASE = (process.argv[2] || 'http://127.0.0.1:8765').replace(/\/$/, '')
+/* hash 路由拼 URL：BASE 已带查询串（线上分享码 ?sharecode=...）时不能再插 `/`，
+   否则分享码被拼成 `XXX/`、网关判无效 403，探针就白屏超时。 */
+const pageUrl = (hash) => (BASE.includes('?') ? `${BASE}${hash}` : `${BASE}/${hash}`)
 const OUT = path.resolve(__dirname, '../.probe-rag')
 const WIDTH = 1440
 const HEIGHT = 1000
@@ -220,7 +223,7 @@ async function main() {
     })
 
     /* ---------- 1. RAG 页首次进入 ---------- */
-    await cdp.send('Page.navigate', { url: `${BASE}/#/rag` })
+    await cdp.send('Page.navigate', { url: pageUrl('#/rag') })
     await waitFor(cdp, "!!document.querySelector('.rag-flow')", 30_000, 'RAG 方法配置')
     await waitFor(cdp, "!!document.querySelector('.rag-recap')", 30_000, '选择回显')
     await evaluate(cdp, "localStorage.removeItem('arw-rag-config')")
@@ -440,7 +443,7 @@ async function main() {
     await evaluate(cdp, "document.documentElement.setAttribute('data-theme','light')")
 
     /* ---------- 4. 知识库页：展开片段 ---------- */
-    await cdp.send('Page.navigate', { url: `${BASE}/#/knowledge` })
+    await cdp.send('Page.navigate', { url: pageUrl('#/knowledge') })
     await waitFor(cdp, "!!document.querySelector('.doc')", 30_000, '知识库文档列表')
     await evaluate(
       cdp,

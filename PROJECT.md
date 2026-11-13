@@ -157,7 +157,7 @@ main.main → transform=matrix(1,0,0,1,0,0)   animation=page-in fill=both
 | iframe 一片黑，只剩底色 | `<head>` 里外链 Google Fonts 的 `<link>` 阻塞 iframe 首次渲染，受限网络下长时间挂起 | 去掉外链，回落系统等宽字体——主视觉靠字距/发光/布局，不依赖字体本体 |
 | iframe 里刻度条永远画不出、读数停在初始值 | srcdoc 文档**继承父页 CSP**，`script-src 'self'` 不放行内联脚本，拦截是静默的 | CSP 加脚本内容的 SHA-256 哈希（比放开 `unsafe-inline` 收敛得多）；在 `backend/tests` 加守卫测试，把 HTML 内容与 CSP 硬绑定，改任何一边忘了另一边测试直接失败 |
 
-回归：RAG 页探针全绿；smoke-render 178/193 与改动前完全一致（15 个失败为存量断言漂移，stash 对照确认与本次无关）。
+回归：RAG 页探针全绿；smoke-render 178/193 与改动前完全一致（15 个失败为存量断言漂移，stash 对照确认与本次无关）。顺带修了探针拼线上地址的方式——带分享码的 BASE 不能在 hash 前再插 `/`，否则分享码变成 `XXX/`、网关 403、探针白屏超时。
 
 ### 视觉改版：暖调纸感 → 冷调深空蓝
 
