@@ -1,0 +1,136 @@
+/* ===== loading.css · 全站统一加载动画（三环旋转） =====
+
+   来源：Uiverse.io（MIT License, Copyright (c) 2023）
+   Component by AqFox: https://uiverse.io/AqFox/little-skunk-97
+
+   原组件 #004dff 硬编码；这里全部走令牌 —— 主题内跟随 --accent，
+   模块级暗色舞台用 --loading-stage-*（恒为深空底，两套主题一致）。
+
+   三环 1s/2s/3s 异速旋转的「转速差」是整个动画的信息来源：
+   无 rAF、无 JS、无 iframe，纯 border + transform。
+   ======================================================================== */
+
+/* ---- 三环本体（TripleRingSpinner 组件） ---- */
+
+.triple-ring {
+  display: grid;
+  flex: none;
+  width: var(--ring-size, 56px);
+  height: var(--ring-size, 56px);
+  border: max(2px, calc(var(--ring-size, 56px) / 14)) solid transparent;
+  border-radius: var(--radius-circle);
+  border-right-color: var(--accent);
+  animation: ring-spin 1s infinite linear;
+}
+
+.triple-ring::before,
+.triple-ring::after {
+  content: "";
+  grid-area: 1 / 1;
+  margin: 2px;
+  border: inherit;
+  border-radius: var(--radius-circle);
+  animation: ring-spin 2s infinite;
+}
+
+.triple-ring::after {
+  margin: 8px;
+  animation-duration: 3s;
+}
+
+@keyframes ring-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* ---- 局部加载块（card / list / table 变体共用） ---- */
+
+.loading-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  box-sizing: border-box;
+}
+
+/* ---- inline 变体：小环 + 一行文字 ---- */
+
+.state-loading--inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.state-loading--inline .state-loading__label {
+  margin: 0;
+}
+
+/* ---- 模块级舞台（App.tsx 的 Suspense 兜底） ---- */
+
+.loading-stage {
+  position: relative;
+  height: clamp(380px, 56vh, 560px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(ellipse 60% 44% at 50% 46%, var(--loading-stage-glow), transparent 72%),
+    var(--loading-stage-bg);
+}
+
+/* 极淡的蓝色扫描线，呼应全站数据终端语言（令牌取值，不硬编码） */
+.loading-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--loading-stage-scan) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+.loading-stage .triple-ring {
+  border-right-color: var(--loading-stage-ring);
+}
+
+.loading-stage__label {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  color: var(--loading-stage-ink);
+}
+
+/* ---- 减少动态：停转，透明度呼吸代替旋转 ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  .triple-ring,
+  .triple-ring::before,
+  .triple-ring::after {
+    animation: ring-breathe 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes ring-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}

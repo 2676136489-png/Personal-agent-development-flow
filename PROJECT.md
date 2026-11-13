@@ -146,6 +146,18 @@ main.main → transform=matrix(1,0,0,1,0,0)   animation=page-in fill=both
 
 按时间倒序。每条都写了当时的动机——这些取舍比代码本身更值得留着。
 
+### 加载动画统一为三环旋转
+
+先试过 Uplink 终端面板（见下一条），最终全站统一成三环旋转（Uiverse.io，MIT）：
+
+- **色彩同源**：三环直接走 `--accent`，与全站电光蓝一脉相承；Uplink 的荧光绿是它自己的终端语境，放进本站等于引入第二套强调色
+- **体量匹配时长**：局部加载大多几百毫秒到两秒，一块带进度叙事的面板反而喧宾夺主；56px 的三环刚好，模块级兜底配深空舞台 + 扫描线垫底
+- **实现最省**：纯 border + transform（1s/2s/3s 异速旋转的「转速差」），无 rAF、无 iframe、无 JS 驱动；`prefers-reduced-motion` 降级为透明度呼吸
+
+Uplink 那轮踩的两个坑（srcdoc 继承 CSP、外链字体阻塞 iframe 渲染）随 iframe 方案一起退役，`script-src` 回到 `'self'`。探索过程留在 git 历史里（`5e03ecb`），需要终端风格时可整体回捞。
+
+回归：RAG 页探针全绿；smoke-render 与改动前一致（15 个失败为存量断言漂移，stash 对照确认）。顺带修了探针拼线上地址的方式——带分享码的 BASE 不能在 hash 前再插 `/`，否则分享码变成 `XXX/`、网关 403、探针白屏超时。
+
 ### 加载态整体换成 Uplink 终端面板
 
 加载态原来是无信息量的灰条骨架屏。整体换成 Uplink Loader（ThreeUI Community，MIT）：模块级 Suspense 兜底用完整电影版（源码原样保留，经沙箱 iframe 渲染），站内 7 处局部加载用同风格的紧凑终端面板移植版——进度刻度条、百分比读数、阶段遥测文案、角标与扫描线，与全站「数据终端」的视觉语言一致。局部版是纯 DOM + 单个 rAF（直接改 DOM 不走 setState），`prefers-reduced-motion` 时定格中间进度。

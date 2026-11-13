@@ -247,6 +247,15 @@
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
 
+  /* ---- 加载态：三环旋转（改编自 Uiverse.io，MIT）----
+     模块级舞台恒为深空底（两套主题下都是"嵌入页面的设备屏"），所以
+     环色/文字不随主题换 —— 取深色主题 accent 作为深底上的环色。 */
+  --loading-stage-bg: #050b16;
+  --loading-stage-ink: #d5e4f5;
+  --loading-stage-ring: #5b93ff;
+  --loading-stage-glow: rgba(37, 99, 235, 0.16);
+  --loading-stage-scan: rgba(125, 165, 235, 0.045);
+
   font-family: var(--font);
   font-synthesis: none;
   text-rendering: optimizeLegibility;

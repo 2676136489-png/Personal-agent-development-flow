@@ -4,7 +4,7 @@ import { ChevronDownIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon } from './compo
 import { ToastHost } from './components/Toast'
 import { PageShell } from './components/PageShell'
 import { ScrollProgress } from './components/ScrollProgress'
-import { UplinkLoader } from './shaders/uplink-loader/UplinkLoader'
+import { TripleRingSpinner } from './components/TripleRingSpinner'
 
 /**
  * 页面级按需加载。
@@ -456,8 +456,9 @@ export default function App() {
             <div className="shell shell--tight">
               <Suspense
                 fallback={
-                  <div className="uplink-stage-slot" role="status" aria-label="正在加载模块…">
-                    <UplinkLoader />
+                  <div className="loading-stage" role="status" aria-label="正在加载模块…">
+                    <TripleRingSpinner size={64} />
+                    <span className="loading-stage__label">正在加载模块…</span>
                   </div>
                 }
               >

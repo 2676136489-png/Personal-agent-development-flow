@@ -282,15 +282,10 @@ class Settings(BaseSettings):
     # 因此按环境自动判定：environment == "production" 才下发。
     # CSP：以「同源 + Google Fonts」为基线。脚本只允许同源（构建产物无内联脚本，
     # 因此不需要 unsafe-inline —— 见前端 index.html 的红线注释）。
-    # ⚠️ script-src 里的 sha256 哈希：模块级 Uplink Loader（frontend/src/shaders/
-    # uplink-loader/uplink-loader.html）以 srcDoc 注入沙箱 iframe，而 srcdoc 文档
-    # **继承父页 CSP** —— 组件的内联驱动脚本必须用哈希放行，否则加载器静默
-    # 退化成黑屏（刻度条不渲染、读数停在初始值）。改那份 HTML 的脚本后必须
-    # 同步重算哈希更新这里；backend/tests/test_production_hardening.py 里的
-    # 守卫测试会在两边失配时失败。置空字符串可整体关闭 CSP。
+    # 置空字符串可整体关闭 CSP。
     content_security_policy: str = (
         "default-src 'self'; "
-        "script-src 'self' 'sha256-6tWbJLkWHbvgAfeHc4h3w1XiMGTmUohOWOH3VKYSg4k='; "
+        "script-src 'self'; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
         "img-src 'self' data:; "

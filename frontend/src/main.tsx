@@ -10,7 +10,7 @@ import './styles/pages.css'
 import './styles/responsive.css'
 import './styles/redesign.css'
 import './styles/rag.css'
-import './styles/uplink.css'
+import './styles/loading.css'
 
 const container = document.getElementById('root')
 if (!container) {
