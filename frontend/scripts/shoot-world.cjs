@@ -125,7 +125,9 @@ async function main() {
     })
 
     for (const route of ROUTES) {
-      await cdp.send('Page.navigate', { url: `${BASE}/#/${route}` })
+      // BASE 可能带 ?sharecode=：hash 必须排在查询串后面，不能插在 ? 之前
+      const url = BASE.includes('?') ? `${BASE}#/${route}` : `${BASE}/#/${route}`
+      await cdp.send('Page.navigate', { url })
       await sleep(route === 'dashboard' ? 6000 : 2200)
       if (SCROLL_Y > 0) {
         await cdp.send('Runtime.evaluate', { expression: `window.scrollTo(0, ${SCROLL_Y})` })
