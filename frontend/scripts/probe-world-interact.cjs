@@ -129,6 +129,35 @@ async function main() {
       console.log('report card:', opened)
     }
 
+    if (FLOW === 'workflow') {
+      await send('Page.navigate', { url: `${BASE}/#/workflow` })
+      await sleep(3000)
+      // React 受控输入：必须走原生 setter + input 事件，直接改 value 不会触发 onChange
+      await evaluate(`(() => {
+        const el = document.querySelector('#wf-question')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+        setter.call(el, '研究 2026 年 AI Agent 开发岗位的主要技术要求')
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        return el.value.length
+      })()`)
+      await sleep(400)
+      await evaluate(`document.querySelector('.input-card .button--primary')?.click()`)
+      await sleep(14000)
+      await shoot('workflow-running')
+      for (let i = 0; i < 30; i++) {
+        await sleep(4000)
+        const done = await evaluate(`!!document.querySelector('.approval')`)
+        if (done) break
+      }
+      await evaluate(`document.querySelector('.card')?.scrollIntoView({ block: 'center' })`)
+      await sleep(600)
+      await shoot('workflow-done')
+      const info = await evaluate(
+        `JSON.stringify({ approval: !!document.querySelector('.approval'), metrics: document.querySelectorAll('.run-metric').length, steps: document.querySelectorAll('.stepper__item').length, error: document.querySelector('.state-error')?.textContent?.slice(0, 100) || '' })`,
+      )
+      console.log(info)
+    }
+
     if (FLOW === 'pipeline') {
       await send('Page.navigate', { url: `${BASE}/#/dashboard` })
       await sleep(4200)
