@@ -118,19 +118,14 @@ export type NavigateFn = (key: string, threadId?: string) => void
 /* ===================== 徽标 ===================== */
 
 /**
- * 字母 R 的定制字形：左侧实心竖干 + 圆形字碗（镂空成正圆，像一枚镜头），
- * 斜腿落到基线。字碗的正圆是「聚焦」，斜腿是「从结论回到证据的那条线」。
- * 单色、无渐变，缩小到 16px 仍能认出是 R。
+ * 白色半圆的进化：外半圆减去内半圆，得到一枚粗半环。
+ * 它保留老标记的「D」形轮廓，中间的空洞让它像镜头 / 光圈——
+ * 从一块空白，变成一个有焦点的形状。单色、无渐变，16px 仍清晰。
  */
 export function LogoMark() {
   return (
-    <svg className="logo-mark" viewBox="0 0 26 36" aria-hidden="true" focusable="false">
-      <rect x="0" y="0" width="4.4" height="36" />
-      <path
-        fillRule="evenodd"
-        d="M4.4 0h7.4a9.2 9.2 0 0 1 0 18.4H4.4zm8.3 5.3a3.9 3.9 0 1 0 0 7.8 3.9 3.9 0 0 0 0-7.8z"
-      />
-      <path d="M10.2 18.4 21.4 36h4.4L13.8 18.4z" />
+    <svg className="logo-mark" viewBox="0 0 18 36" aria-hidden="true" focusable="false">
+      <path fillRule="evenodd" d="M0 0A18 18 0 0 1 0 36ZM0 9A9 9 0 0 1 0 27Z" />
     </svg>
   )
 }

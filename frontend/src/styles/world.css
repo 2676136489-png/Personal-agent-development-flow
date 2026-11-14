@@ -519,9 +519,9 @@ code {
   border-bottom-color: var(--line-soft);
 }
 
-/* 徽标：定制 R + 粗体名词 + 细体名词。
-   R 的字碗是正圆镂空，像镜头，也保留老半圆的「D」轮廓记忆；
-   悬停时整枚字标轻轻侧转，像盖章，而不是把字形压扁。 */
+/* 徽标：粗半环 + 粗体名词 + 细体名词。
+   半环是旧白色半圆的进化：外半圆减去内半圆，像镜头 / 光圈，
+   也保留老标记的「D」轮廓记忆；悬停时整枚字标轻轻侧转，像盖章。 */
 .logo {
   display: flex;
   align-items: center;
@@ -535,7 +535,7 @@ code {
 
 .logo-mark {
   width: auto;
-  height: 30px;
+  height: 34px;
   margin-right: 10px;
   flex: none;
   fill: currentColor;
@@ -2853,7 +2853,7 @@ input[type="checkbox"]:checked::after {
     margin-right: 0;
   }
   .logo-mark {
-    height: 24px;
+    height: 28px;
     margin-right: 8px;
   }
   /* 文字让位：目录收成一个 26px 的圆点按钮，仍可点开全站索引 */
