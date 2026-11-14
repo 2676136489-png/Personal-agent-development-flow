@@ -181,7 +181,7 @@ try {
     'Hero 规格：箭头 2.5px 描边 / CTA hover 反白',
     /\.arrow\s*\{[\s\S]{0,160}border:\s*2\.5px solid #fff/.test(styles) && /\.cta:hover\s*\{\s*background:\s*#fff/.test(styles),
   )
-  expect('Hero 规格：07 为 1.5px 描边数字', /-webkit-text-stroke:\s*1\.5px/.test(styles))
+  expect('Hero 规格：07 为 2px 描边数字', /-webkit-text-stroke:\s*2px/.test(styles))
 
   /* ============ 类名覆盖：换皮最容易漏的是错误态 / 展开态 ============ */
   const walk = (dir, test) => {
