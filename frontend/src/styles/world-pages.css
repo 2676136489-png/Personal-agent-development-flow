@@ -1339,8 +1339,12 @@
 .download-report__toggle {
   display: grid;
   place-items: center;
-  width: 40px;
+  width: 46px;
   height: 46px;
+  /* 按钮全局 padding 是 0 22px，会把 46px 的内容区挤成 2px ——
+     里面的 svg 又受全局 `svg { max-width: 100% }` 约束，直接被压成 0 宽看不见。
+     这里把 padding 归零，宽度由 width 定死，箭头才画得出来。 */
+  padding: 0;
   margin-left: -1.5px;
   border: 1.5px solid rgba(255, 255, 255, 0.85);
   border-radius: 0 var(--r-md) var(--r-md) 0;
@@ -1349,7 +1353,10 @@
   cursor: pointer;
   transition: background 0.25s ease, color 0.25s ease;
 }
-.download-report__main .button {
+/* 主按钮与箭头按钮拼成一体：左侧保留圆角，右侧贴住箭头按钮。
+   ⚠️ 之前写成 `.download-report__main .button` —— 主按钮自己就带 .button 类，
+   后代选择器永远匹配不到，圆角一直是完整的 10px，两块之间裂开一道缝。 */
+.download-report__main {
   border-radius: var(--r-md) 0 0 var(--r-md);
 }
 .download-report__toggle:hover {
