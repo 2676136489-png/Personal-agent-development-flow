@@ -19,9 +19,13 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+import secrets
 import socket
 from urllib.parse import urlparse
 
+from fastapi import Header
+
+from app.core.config import get_settings
 from app.core.errors import AppError, ErrorCode
 
 logger = logging.getLogger(__name__)
@@ -144,3 +148,49 @@ def wrap_untrusted_block(content: str) -> str:
         f"{content}\n"
         f"{UNTRUSTED_BLOCK_END}"
     )
+
+
+# ------------------------------ 管理员令牌 ------------------------------
+
+ADMIN_TOKEN_HEADER = "X-Admin-Token"
+
+
+def _configured_admin_token() -> str:
+    """读取当前生效的管理员令牌；未配置时返回空字符串。"""
+    return get_settings().admin_token.get_secret_value().strip()
+
+
+def admin_enabled() -> bool:
+    """后端是否配置了管理员令牌（未配置时整个实例是只读演示）。"""
+    return bool(_configured_admin_token())
+
+
+def is_admin_token_valid(token: str | None) -> bool:
+    """常量时间比较令牌，避免通过响应时间猜测。"""
+    expected = _configured_admin_token()
+    if not expected or not token:
+        return False
+    return secrets.compare_digest(token.strip(), expected)
+
+
+def require_admin(
+    x_admin_token: str | None = Header(default=None, alias=ADMIN_TOKEN_HEADER),
+) -> None:
+    """FastAPI 依赖：写操作必须携带正确的管理员令牌。
+
+    设计取舍：
+    - 未配置令牌时**默认拒绝**，而不是默认放行 —— 公开部署最怕的是「忘了配」；
+    - 令牌只放请求头，不进 URL / 日志 / 前端本地存储以外的位置。
+    """
+    if not admin_enabled():
+        raise AppError(
+            code=ErrorCode.UNAUTHORIZED,
+            message="当前实例未配置 ADMIN_TOKEN，写操作已禁用（只读演示模式）",
+            status_code=403,
+        )
+    if not is_admin_token_valid(x_admin_token):
+        raise AppError(
+            code=ErrorCode.UNAUTHORIZED,
+            message="管理员令牌不正确或缺失",
+            status_code=401,
+        )

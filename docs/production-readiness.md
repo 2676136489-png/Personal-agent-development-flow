@@ -8,6 +8,24 @@
 
 ---
 
+## ✅ 2026-11-14 公开部署加固
+
+| 项 | 处理 |
+|---|---|
+| 写操作无边界 | 新增 `ADMIN_TOKEN`：留空即只读演示；上传/删除/清空/重建向量/调试端点均要求 `X-Admin-Token`；前端设置页可解锁 |
+| 重启后的僵尸运行 | 启动时把遗留的 `running` / `awaiting_approval` 收敛为 `interrupted`，前端显示「已中断，请重新发起」 |
+| 报告篇幅不足 | write 节点硬检查 summary ≥150 字、≥3 节、每节 ≥200 字；一次扩写重试，仍不达标写入 limitations |
+| 核查不查覆盖面 | verify 现在同时检查计划子问题是否都有结论，跑题证据不能支撑结论 |
+| 效果评估数据缺失 | 运行列表返回耗时 / token / 失败原因；页面展示成功率、平均耗时、平均 token、状态分布与失败原因 |
+| Google Fonts 阻塞首屏 | Poppins 改为自托管 `public/fonts`，删除外链；CSP 收紧 `font-src` / `style-src` |
+| 无 CI | 新增 `.github/workflows/ci.yml`：ruff + pytest + 前端构建 |
+| CORS 通配 | 生产 `.env.production` 收敛到实际站点与本地 dev 来源 |
+| 个人文档暴露 | 写操作已加边界；公开实例上的示例/个人文档仍建议按需清理 |
+
+> 仍未覆盖：正式账号体系与多用户隔离、SQLite 备份/迁移框架、多实例限流与配额。
+
+---
+
 ## ✅ 本轮已修复
 
 ### 前端
@@ -21,7 +39,7 @@
 | 项 | 说明 |
 |---|---|
 | 安全响应头 | 新增纯 ASGI `SecurityHeadersMiddleware`：`X-Content-Type-Options`、`X-Frame-Options: DENY`、`Referrer-Policy`、`Permissions-Policy`、`Cross-Origin-Opener-Policy`、`CSP`，生产环境追加 `HSTS`。 |
-| CSP | `default-src 'self'`；脚本仅同源（构建产物无内联脚本）；样式/字体放行 Google Fonts；`connect-src` 额外精确放行首屏玻璃立方体的 GLB 来源（`https://motionsites.org`，不写通配）。可用 `CONTENT_SECURITY_POLICY` 覆盖或置空关闭。 |
+| CSP | `default-src 'self'`；脚本仅同源（构建产物无内联脚本）；样式与字体均同源（字体已自托管，不再放行 Google Fonts）；`connect-src` 额外精确放行首屏玻璃立方体的 GLB 来源（`https://motionsites.org`，不写通配）。可用 `CONTENT_SECURITY_POLICY` 覆盖或置空关闭。 |
 | GZip 压缩 | 只对 `/assets` 静态挂载点启用 —— **不给全局加** `GZipMiddleware`，因为那会缓冲压缩 SSE 事件流。 |
 | 静态缓存策略 | `/assets/*`（内容哈希）→ `public, max-age=31536000, immutable`；`index.html` → `no-cache`。杜绝「部署后旧 HTML 指向已删 chunk → 白屏」。 |
 | 生产关闭 API 文档 | `API_DOCS_ENABLED=false` 时 `/api/docs`、`/api/openapi.json` 返回 404。 |
@@ -31,7 +49,8 @@
 | **结构化输出容错** | `AgentDecision` 二选一从「硬失败」改为「能救则救 + 带修复提示重试一次」（详见 `tests/test_structured_repair.py`）。 |
 
 ### 验证
-- 前端 `npm run build` 通过；后端 `pytest` **181 passed**；`ruff` 改动文件全绿。
+- 前端 `npm run build` 通过；后端 `pytest` **181 passed**（当轮，当前为 268 passed）；
+  `ruff` 改动文件全绿。
 - 运行时冒烟（5 项全过）：安全头 / 文档关闭 / index `no-cache` / 资产 `immutable+gzip` / 限流 429。
 
 ---
@@ -39,27 +58,25 @@
 ## 🔧 待办（P1，上线前后尽快）
 
 ### 前端
-- **字体来源风险**：当前从 `fonts.googleapis.com` 拉 Poppins（300–800，全站唯一字族，中文回落系统黑体）。国内网络对该域可能不可达或不稳定，且外链 CSS **阻塞首屏渲染**。建议二选一：
-  1. 自托管 woff2（放 `public/fonts/` + `@font-face`），彻底消除外链；或
-  2. 反正文字栈已有系统回退（思源黑体/苹方/等宽），直接移除外链、改用系统字体。
-  > ⚠️ 改字体时**必须同时改两处**：`index.html` 的 `<link href="fonts.googleapis.com/...">`
-  > 外链，与 `styles/world.css` 的 `--font`（以及 `--mono`）。
-  > 只改后者的话，外链还在拉旧字体、新字体从未下载，计算样式照样显示新字体名，
-  > **实际渲染静默回退系统字体**，肉眼很难发现（探针 `probe-visual-theme.cjs`
-  > 的「字体真被加载」断言就是为拦住这个而加的）。
+- ~~字体来源风险~~（**已解决**）：Poppins 300–800 已自托管到 `public/fonts`，
+  通过 `styles/fonts.css` 的 `@font-face` 同源加载；`index.html` 的 Google Fonts
+  外链已删除，首屏不再被第三方 CSS 阻塞。
 - **首屏是 WebGL**：`index.html` 不含任何 3D 相关资源，three.js 只在概览页按需加载；模型加载失败或超过 8 秒会回落到程序化几何，首屏不会因此空白。若浏览器禁用 WebGL，`#scene` 保持黑底，标题与全部导航仍可用。
 - **视觉回归已有工具，a11y 仍缺**：结构与契约由 `frontend/scripts/smoke-render.mjs`（46 条，含类名覆盖率与 three.js 渲染管线）守住，逐页版式由 `shoot-world.cjs` 截图人工比对；尚未接入 axe 等自动化可访问性扫描。
 
 ### 后端
-- **长请求可能触发网关超时（重点）**：`POST /api/graph/research`、`POST /api/agent/run` 会**同步阻塞**直到整段流程跑完（研究图到「写报告前中断」为止，可能 30–120s）。若反向代理的读超时更短，代理会回一个 **HTML 错误页**（502/504）→ 前端看到「非 JSON 响应」。
-  - 短期：调大网关/代理的读超时；或按环境把 `GRAPH_MAX_ITERATIONS` / `LLM_*_TIMEOUT_SECONDS` 收紧到代理超时以内。
-  - 正解：把 `start_research` 改为**非阻塞**（立即返回 thread_id，图在后台跑，进度全靠已在用的 SSE 推送）—— 前端本来就是「先订阅 SSE、再发起运行」，架构上已经预留了这条路。
-- **无限流外的滥用面**：限流是**进程内单 worker** 语义（与配额一致），多实例部署需换网关/Redis 级限流。另外当前**无鉴权** —— 拿到分享链接的任何人都能发起研究并消耗额度；若需限制，建议加访问口令 / 平台侧鉴权。
+- ~~长请求可能触发网关超时~~（**已解决**）：`start_research` / `resume_research` 已改为
+  后台任务执行，接口立即返回；进度由 SSE + 轮询两条通道同步。
+- **滥用面**：限流是**进程内单 worker** 语义（与配额一致），多实例部署需换网关/Redis 级限流。
+  写操作已有 `ADMIN_TOKEN` 边界，但**仍没有多用户账号体系** —— 持链接者依然可以发起研究、
+  查看共享知识库与历史记录，只是不能删除/清空/上传。若要多租户隔离，需要正式鉴权。
 - **tracing 欠账**：`app/observability/` 只有 metrics，架构文档 §6.1 的 tracing 尚未落地。
 - **数据层**：SQLite 无备份/迁移框架，schema 迁移是内联 `ALTER TABLE`。上线后建议加定期备份（`storage/*.db`）与正式的迁移脚本。
 - **健康检查粒度**：`/api/health` 合并了 liveness 与 readiness，当前规模够用；若接入编排探针可拆分。
 
 ### 运维 / 工程
-- **无 CI**：lint / test / build 未在提交时自动跑。建议加最小 CI（`ruff` + `pytest` + `npm run build`）。
-- **CORS**：生产 `CORS_ORIGINS=*`；同源部署下影响有限，若未来前后端分域，应收敛到具体域名。
+- ~~无 CI~~（**已解决**）：新增 `.github/workflows/ci.yml`，提交与 PR 自动跑
+  `ruff` + `pytest` + 前端 `npm run build`。
+- **CORS**：生产 `.env.production` 已收敛到实际站点与本地 dev 来源；若未来前后端分域，
+  继续按域名维护白名单，不要再使用 `*`。
 - **密钥轮换**：`.env.production` 含真实 Key（靠 `.gitignore` + 上传沙箱保护）。建议登记轮换预案，泄漏即吊销重建。

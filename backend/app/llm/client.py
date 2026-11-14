@@ -774,7 +774,8 @@ class MockLLMClient(BaseLLMClient):
 
     [P2] 存在的真实原因：没有 API Key 也能跑通「前端 → 后端 → Agent 循环」全链路，
     否则本地开发、自动化测试、CI 全都依赖外部付费服务。
-    目前覆盖两个 purpose：planning（生成计划）与 agent_step（Agent 循环中的决策）。
+    覆盖研究工作流的全部节点（理解 / 计划 / 决策 / 分析 / 核查 / 写作 / 扩写）
+    以及 ping / 流式自检。
     """
 
     provider_name = "mock"
@@ -823,6 +824,8 @@ _MOCK_PURPOSES = frozenset(
         "analyze",
         "verify",
         "write",
+        # write 篇幅不达标时的二次扩写调用
+        "write_repair",
         # 模型自检（/api/llm/ping、/api/llm/stream）—— 非结构化调用
         "ping",
         "stream_probe",
@@ -918,12 +921,11 @@ def _mock_payload(request: LLMRequest, question: str) -> dict | str:
             "missing": [] if enough else ["补充一手来源", "交叉验证关键数据"],
         }
 
-    if purpose == "write":
-        # [B21] 报告 schema 现在有篇幅硬校验（summary ≥150 字 / 全文 ≥300 字，
-        # 见 graph/schemas.py 的 _report_must_have_substance）。
+    if purpose in ("write", "write_repair"):
+        # [B21] 报告 schema 与 write 节点都有篇幅硬校验。
         # Mock 的职责是模仿「一个合格的模型」，所以这里输出的篇幅必须真实达标，
         # 否则 Mock 流程会被自己的校验打回 repair，偏离「离线验证流程」的本职。
-        return {
+        payload = {
             "title": f"{topic} — 研究报告（Mock）",
             "summary": (
                 f"（Mock 数据）本报告围绕「{topic}」展开，基于离线语料库生成，"
@@ -969,6 +971,19 @@ def _mock_payload(request: LLMRequest, question: str) -> dict | str:
             ],
             "limitations": ["当前为离线 Mock 模式，结论不具备事实效力"],
         }
+        # 让 Mock 输出本身满足 write 节点的硬门槛（summary ≥150、每节 ≥200），
+        # write_repair 再多留一点余量，模拟「按缺口扩写后达标」。
+        filler = (
+            "这一段补充说明该结论的适用边界、证据来源与可能的反例，"
+            "便于读者按图索骥核对原文，并判断结论在什么条件下成立。"
+        )
+        target = 240 if purpose == "write_repair" else 210
+        while len(payload["summary"]) < 160:
+            payload["summary"] += filler
+        for section in payload["sections"]:
+            while len(section["content"]) < target:
+                section["content"] += filler
+        return payload
 
     return _build_mock_plan(question)
 

@@ -28,7 +28,7 @@ class ResumeRequest(BaseModel):
 
 class ResearchRunResponse(BaseModel):
     thread_id: str
-    status: str  # running | awaiting_approval | completed | cancelled | failed
+    status: str  # running | awaiting_approval | completed | cancelled | failed | interrupted
     question: str
     understanding: dict | None = None
     plan: dict | None = None

@@ -2,7 +2,14 @@
 import type { Citation } from './knowledge'
 import type { ResearchPlan } from './research'
 
-export type RunStatus = 'running' | 'awaiting_approval' | 'completed' | 'cancelled' | 'failed'
+export type RunStatus =
+  | 'running'
+  | 'awaiting_approval'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
+  /** 服务进程重启后内存中断点丢失，无法继续；需要重新发起 */
+  | 'interrupted'
 
 export interface TaskUnderstanding {
   goal: string
@@ -87,5 +94,14 @@ export interface ResearchRunSummary {
   thread_id: string
   question: string
   status: RunStatus
+  created_at: string
   updated_at: string
+  /** 墙钟耗时（毫秒），用于效果评估的耗时分布 */
+  duration_ms: number
+  /** 本次运行所有 LLM 调用的 token 总数 */
+  usage_total_tokens: number
+  iteration: number
+  verify_attempts: number
+  error: string | null
+  finished_reason: string
 }

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from app.core.config import get_settings
 from app.core.errors import AppError, ErrorCode
 from app.core.responses import ApiResponse, success_response
+from app.core.security import require_admin
 from app.rag.schemas import Document, DocumentChunk, RetrievedChunk
 from app.rag.service import KnowledgeService, get_knowledge_service
 from app.schemas.knowledge import SearchRequest
@@ -50,6 +51,7 @@ async def _read_limited(file: UploadFile, max_bytes: int) -> bytes:
 async def upload_document(
     file: UploadFile = File(...),
     service: KnowledgeService = Depends(get_knowledge_service),
+    _admin: None = Depends(require_admin),
 ) -> ApiResponse[Document]:
     settings = get_settings()
     filename = file.filename or "unnamed"
@@ -123,6 +125,7 @@ async def knowledge_status(
 async def reindex_document(
     document_id: str,
     service: KnowledgeService = Depends(get_knowledge_service),
+    _admin: None = Depends(require_admin),
 ) -> ApiResponse[Document]:
     return success_response(await service.reindex_document(document_id))
 
@@ -135,6 +138,7 @@ async def reindex_document(
 async def reindex_all(
     force: bool = False,
     service: KnowledgeService = Depends(get_knowledge_service),
+    _admin: None = Depends(require_admin),
 ) -> ApiResponse[dict]:
     return success_response(await service.reindex_stale(force=force))
 
@@ -159,6 +163,7 @@ async def list_chunks(
 async def delete_document(
     document_id: str,
     service: KnowledgeService = Depends(get_knowledge_service),
+    _admin: None = Depends(require_admin),
 ) -> ApiResponse[dict]:
     if not service.delete_document(document_id):
         raise AppError(

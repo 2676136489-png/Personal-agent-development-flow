@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import StreamingResponse
 
 from app.core.errors import AppError, ErrorCode
 from app.core.responses import ApiResponse, success_response
+from app.core.security import require_admin
 from app.events.sse import event_stream
 from app.graph.service import (
     TERMINAL_STATUSES,
@@ -90,7 +91,10 @@ async def get_research_run(thread_id: str) -> ApiResponse[ResearchRunResponse]:
 async def list_research_runs(
     status: str | None = Query(
         default=None,
-        description="按状态过滤：running / awaiting_approval / completed / failed / cancelled",
+        description=(
+            "按状态过滤：running / awaiting_approval / completed / failed / "
+            "cancelled / interrupted"
+        ),
     ),
     # [B11] 之前 limit 写死 20 且不暴露给调用方，前端「效果评估」页的
     # 「总运行次数」因此最多只能统计 20 条，指标是失真的。
@@ -104,7 +108,10 @@ async def list_research_runs(
     response_model=ApiResponse[dict],
     summary="删除一条历史运行（含其事件）",
 )
-async def delete_research_run(thread_id: str) -> ApiResponse[dict]:
+async def delete_research_run(
+    thread_id: str,
+    _admin: None = Depends(require_admin),
+) -> ApiResponse[dict]:
     if not delete_run(thread_id):
         raise AppError(
             code=ErrorCode.NOT_FOUND,
@@ -119,7 +126,9 @@ async def delete_research_run(thread_id: str) -> ApiResponse[dict]:
     response_model=ApiResponse[dict],
     summary="清空全部历史运行（含事件）",
 )
-async def clear_research_runs() -> ApiResponse[dict]:
+async def clear_research_runs(
+    _admin: None = Depends(require_admin),
+) -> ApiResponse[dict]:
     return success_response(clear_runs())
 
 

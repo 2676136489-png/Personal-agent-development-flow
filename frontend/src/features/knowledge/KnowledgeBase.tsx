@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  deleteDocument,
   fetchDocumentChunks,
   fetchKnowledgeStatus,
   listDocuments,
@@ -9,6 +10,7 @@ import {
   uploadDocument,
 } from '../../api/knowledge'
 import { ApiClientError } from '../../api/client'
+import { useAdminAccess } from '../../lib/admin'
 import { StatusBadge } from '../../components/StatusBadge'
 import { PageHeader } from '../../components/PageHeader'
 import { EmptyState } from '../../components/EmptyState'
@@ -37,6 +39,8 @@ export function KnowledgeBase({ onNavigate }: KnowledgeBaseProps) {
   const [listError, setListError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+  // 上传 / 重建向量会写入共享知识库并消耗 embedding 额度，默认只读演示
+  const admin = useAdminAccess()
 
   const refresh = useCallback(async () => {
     // [F3] 之前没有 catch：后端不可用时首屏加载直接抛未捕获 rejection，
@@ -95,6 +99,30 @@ export function KnowledgeBase({ onNavigate }: KnowledgeBaseProps) {
     }
   }
 
+  async function handleDeleteDocument(doc: Document) {
+    if (
+      !window.confirm(
+        `确定删除《${doc.filename}》？它的 ${doc.chunk_count} 个片段会一起删除，且不可恢复。`,
+      )
+    ) {
+      return
+    }
+    setBusyId(doc.id)
+    setMessage(null)
+    try {
+      await deleteDocument(doc.id)
+      setMessage({ kind: 'ok', text: `已删除：${doc.filename}` })
+      await refresh()
+    } catch (error) {
+      setMessage({
+        kind: 'error',
+        text: error instanceof ApiClientError ? error.message : '删除文档失败',
+      })
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function handleReindexAll() {
     setBusyId('__all__')
     setMessage(null)
@@ -135,7 +163,14 @@ export function KnowledgeBase({ onNavigate }: KnowledgeBaseProps) {
         }
       />
 
-      {status && <EmbeddingBanner status={status} onReindexAll={handleReindexAll} busy={busyId === '__all__'} />}
+      {status && (
+        <EmbeddingBanner
+          status={status}
+          onReindexAll={handleReindexAll}
+          busy={busyId === '__all__'}
+          canWrite={admin.authenticated}
+        />
+      )}
 
       <div className="panel__notes">
         <div>
@@ -148,24 +183,35 @@ export function KnowledgeBase({ onNavigate }: KnowledgeBaseProps) {
         </div>
       </div>
 
-      <div className="upload">
-        {/* 原生 file 控件样式化：藏进可聚焦的 label，键盘仍可 Tab 到并回车触发 */}
-        <label className="file-field" data-busy={uploading ? 'true' : 'false'}>
-          <span>{uploading ? '处理中（解析 / 切块 / 向量化）…' : '选择文件上传'}</span>
-          <input
-            ref={fileInput}
-            className="file-field__input"
-            type="file"
-            accept=".pdf,.md,.markdown,.txt"
-            disabled={uploading}
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) void handleFile(file)
-            }}
-          />
-        </label>
-        <span className="hint">支持 .pdf .md .txt，单文件 ≤ 10MB</span>
-      </div>
+      {admin.authenticated ? (
+        <div className="upload">
+          {/* 原生 file 控件样式化：藏进可聚焦的 label，键盘仍可 Tab 到并回车触发 */}
+          <label className="file-field" data-busy={uploading ? 'true' : 'false'}>
+            <span>{uploading ? '处理中（解析 / 切块 / 向量化）…' : '选择文件上传'}</span>
+            <input
+              ref={fileInput}
+              className="file-field__input"
+              type="file"
+              accept=".pdf,.md,.markdown,.txt"
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) void handleFile(file)
+              }}
+            />
+          </label>
+          <span className="hint">支持 .pdf .md .txt，单文件 ≤ 10MB</span>
+        </div>
+      ) : (
+        <div className="alert">
+          只读演示：上传文档与重建向量会写入共享知识库，需要管理员令牌。
+          {onNavigate && (
+            <button type="button" className="link-button" onClick={() => onNavigate('settings')}>
+              去系统设置解锁
+            </button>
+          )}
+        </div>
+      )}
 
       {message && (
         <div className={`alert ${message.kind === 'error' ? 'alert--error' : 'alert--ok'}`}>
@@ -196,7 +242,9 @@ export function KnowledgeBase({ onNavigate }: KnowledgeBaseProps) {
               doc={doc}
               activeModel={status?.active_model ?? null}
               busy={busyId === doc.id}
+              canWrite={admin.authenticated}
               onReindex={() => void handleReindex(doc.id)}
+              onDelete={() => void handleDeleteDocument(doc)}
             />
           ))}
         </ul>
@@ -222,10 +270,12 @@ function EmbeddingBanner({
   status,
   onReindexAll,
   busy,
+  canWrite,
 }: {
   status: KnowledgeStatus
   onReindexAll: () => void
   busy: boolean
+  canWrite: boolean
 }) {
   const active = status.active
   return (
@@ -247,7 +297,7 @@ function EmbeddingBanner({
           )}
         </div>
       </div>
-      {status.stale_documents > 0 && (
+      {status.stale_documents > 0 && canWrite && (
         <button
           type="button"
           className="button button--primary kb-status__action"
@@ -267,12 +317,16 @@ function DocumentRow({
   doc,
   activeModel,
   busy,
+  canWrite,
   onReindex,
+  onDelete,
 }: {
   doc: Document
   activeModel: string | null
   busy: boolean
+  canWrite: boolean
   onReindex: () => void
+  onDelete: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [chunks, setChunks] = useState<DocumentChunk[] | null>(null)
@@ -306,9 +360,21 @@ function DocumentRow({
           <button type="button" className="button" onClick={() => void toggle()}>
             {open ? '收起片段' : '查看片段'}
           </button>
-          <button type="button" className="button" disabled={busy} onClick={onReindex}>
-            {busy ? '重算中…' : '重建向量'}
-          </button>
+          {canWrite && (
+            <button type="button" className="button" disabled={busy} onClick={onReindex}>
+              {busy ? '重算中…' : '重建向量'}
+            </button>
+          )}
+          {canWrite && (
+            <button
+              type="button"
+              className="link-button link-button--danger"
+              disabled={busy}
+              onClick={onDelete}
+            >
+              删除
+            </button>
+          )}
           <StatusBadge variant={DOC_STATUS[doc.status]?.variant ?? 'neutral'}>
             {DOC_STATUS[doc.status]?.label ?? doc.status}
           </StatusBadge>

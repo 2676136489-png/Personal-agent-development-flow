@@ -46,6 +46,36 @@ export function apiUrl(path: string): string {
   return `${API_BASE_URL}${path}`
 }
 
+/* ------------------------------ 管理员令牌 ------------------------------ */
+
+/**
+ * 写操作边界：删除文档 / 清空历史 / 重建立向量需要管理员令牌。
+ *
+ * 为什么放 sessionStorage 而不是 localStorage：
+ * 令牌只对当前标签页会话有效，关掉浏览器就失效，降低公共机器上的泄漏面。
+ * 真正的校验永远在后端，前端这里只负责携带与展示状态。
+ */
+const ADMIN_TOKEN_KEY = 'arw-admin-token'
+
+export function getAdminToken(): string {
+  try {
+    return sessionStorage.getItem(ADMIN_TOKEN_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/** 保存令牌并通知其它页面重新检查权限状态。 */
+export function setAdminToken(token: string): void {
+  try {
+    if (token.trim()) sessionStorage.setItem(ADMIN_TOKEN_KEY, token.trim())
+    else sessionStorage.removeItem(ADMIN_TOKEN_KEY)
+  } catch {
+    /* 存储被禁用时静默降级：本次请求仍会带上内存里的值 */
+  }
+  window.dispatchEvent(new Event('arw-admin-changed'))
+}
+
 /** 所有请求都会被包成这个错误抛出，组件只需要 catch 一种类型 */
 export class ApiClientError extends Error {
   readonly code: string
@@ -227,6 +257,7 @@ async function request<T>(
 ): Promise<T> {
   const { signal, cleanup } = withTimeout(init?.signal, timeoutMs)
 
+  const adminToken = getAdminToken()
   let response: Response
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
@@ -235,6 +266,7 @@ async function request<T>(
       headers: {
         Accept: 'application/json',
         ...init?.headers,
+        ...(adminToken ? { 'X-Admin-Token': adminToken } : {}),
       },
     })
   } catch (error) {
@@ -284,12 +316,14 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
   formData.append('file', file)
   const { signal, cleanup } = withTimeout(undefined, DEFAULT_TIMEOUT_MS)
 
+  const adminToken = getAdminToken()
   let response: Response
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method: 'POST',
       body: formData,
       signal,
+      headers: adminToken ? { 'X-Admin-Token': adminToken } : undefined,
     })
   } catch (error) {
     if (isAbortError(error)) {

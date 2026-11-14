@@ -179,10 +179,14 @@ JSON 必须严格符合下面的 JSON Schema：
 2. 逐条检查该证据的内容是否**真的支持**这条结论；只是"沾边"不算支持。
 3. 证据之间存在矛盾、而分析里没有说明的，视为未解决。
 4. 结论里出现证据未覆盖的具体数字/事实 → 按编造处理。
+5. 逐条检查研究计划里的每个关键子问题是否都有对应结论；某个子问题完全没被回答，
+   即使现有结论都有依据，也判 needs_more，并把该子问题写进 missing。
+6. 证据与问题明显无关（跑题）时不能用来支撑结论；若关键结论只靠跑题证据，
+   判 needs_more。
 
 判定标准：
-- 全部结论都能被证据支撑 → verdict = "pass"
-- 存在编造、缺乏支撑、未解决的冲突或缺少来源 → verdict = "needs_more"，
+- 全部结论都能被证据支撑，**且计划中的关键子问题都有覆盖** → verdict = "pass"
+- 存在编造、缺乏支撑、未解决的冲突、覆盖缺口或缺少来源 → verdict = "needs_more"，
   并在 missing 中具体写清「还缺什么」，细到可以用来直接发起下一轮搜索
 
 {_STR_LIST_RULE}
@@ -190,6 +194,9 @@ JSON 必须严格符合下面的 JSON Schema：
 {_SAFETY_RULE}"""
 
 _VERIFY_USER = """研究问题：{question}
+
+研究计划中的关键子问题（必须逐条检查是否被回答）：
+{plan_questions}
 
 分析结论：
 {analysis}
@@ -238,6 +245,42 @@ _WRITE_USER = """研究问题：{question}
 可引用的来源清单（禁止引用清单之外的来源）：
 {sources}
 {feedback_block}"""
+
+# 篇幅未达标时的二次重写。为什么单独做一轮而不是只靠 schema 校验：
+# 1. schema 只能拒绝「短到不合规」的报告，拒绝后整条 run 会失败；
+# 2. 这里保留上一版内容，只要求按缺口扩写，模型更容易写出有信息密度的长文，
+#    而不是重新生成一份同样短的内容。
+_WRITE_REPAIR_SYSTEM = f"""你是研究报告编辑。上一版报告通过了 JSON 校验，但没有达到篇幅要求。
+请在保留原有结构、结论与证据编号的前提下，把内容扩写到要求长度。
+
+{_JSON_RULE}
+JSON 必须严格符合下面的 JSON Schema：
+{{schema}}
+
+硬性要求：
+1. summary 150~300 字，概括研究问题、核心结论与最重要依据。
+2. 保留原有小节数量（3~6 个），**每个小节不少于 200 字**；
+   用 Markdown 分点、必要的加粗，把证据内容展开叙述，禁止只罗列短语。
+3. 只能使用给定证据，禁止补充证据之外的具体事实；关键叙述继续标注 [证据N]。
+4. limitations 保持字符串数组；若没有明显局限就填 []。
+
+{_SAFETY_RULE}"""
+
+_WRITE_REPAIR_USER = """研究问题：{question}
+
+上一版报告（需要扩写，不要改变已有结论）：
+{previous_report}
+
+未达标项（逐条修正）：
+{gaps}
+
+可用证据：
+{evidence}
+
+可引用的来源清单（禁止引用清单之外的来源）：
+{sources}
+
+请输出扩写后的完整报告 JSON。"""
 
 
 def understanding_messages(question: str) -> list[ChatMessage]:
@@ -325,12 +368,26 @@ def analyze_messages(question: str, evidence: list[str]) -> list[ChatMessage]:
     ]
 
 
-def verify_messages(question: str, analysis: dict, evidence: list[str]) -> list[ChatMessage]:
+def _plan_questions(plan: dict | None) -> str:
+    """把计划里的关键子问题摊平成清单，供 verify 逐条检查覆盖度。"""
+    if not plan:
+        return "（暂无计划：按研究问题本身核对覆盖度）"
+    questions = plan.get("questions") or []
+    if not isinstance(questions, list) or not questions:
+        return "（计划中未列出子问题）"
+    return "\n".join(f"{index}. {str(item)}" for index, item in enumerate(questions, start=1))
+
+
+def verify_messages(
+    question: str,
+    analysis: dict,
+    evidence: list[str],
+    plan: dict | None = None,
+) -> list[ChatMessage]:
     """构造核查消息。
 
-    [P1] 核查必须看到证据原文。此前这里只传「证据条数」，核查员只能凭数量
-    猜测结论有没有依据 ——「逐条核对结论与证据」在物理上就不可能完成，
-    verdict 基本是走过场（这也是报告里编造内容没被拦住的根因）。
+    [P1] 核查必须看到证据原文与计划里的子问题。只核对「结论有没有证据」
+    会漏掉两类问题：某个子问题完全没被回答；某个结论只靠跑题证据支撑。
     """
     joined = (
         "\n---\n".join(
@@ -348,6 +405,7 @@ def verify_messages(question: str, analysis: dict, evidence: list[str]) -> list[
             role="user",
             content=_VERIFY_USER.format(
                 question=question,
+                plan_questions=_plan_questions(plan),
                 analysis=_dump(analysis),
                 evidence=joined,
             ),
@@ -398,6 +456,36 @@ def write_messages(
                 evidence=joined,
                 sources=_format_sources(sources),
                 feedback_block=feedback_block,
+            ),
+        ),
+    ]
+
+
+def write_repair_messages(
+    question: str,
+    previous_report: dict,
+    gaps: list[str],
+    evidence: list[str],
+    sources: list[dict] | None = None,
+) -> list[ChatMessage]:
+    """篇幅未达标时的二次重写消息。"""
+    joined = (
+        "\n---\n".join(f"[证据{i + 1}] {item}" for i, item in enumerate(evidence))
+        or "（暂无证据）"
+    )
+    return [
+        ChatMessage(
+            role="system",
+            content=_WRITE_REPAIR_SYSTEM.format(schema=schema_for_prompt(ResearchReport)),
+        ),
+        ChatMessage(
+            role="user",
+            content=_WRITE_REPAIR_USER.format(
+                question=question,
+                previous_report=_dump(previous_report),
+                gaps="\n".join(f"- {item}" for item in gaps),
+                evidence=joined,
+                sources=_format_sources(sources),
             ),
         ),
     ]

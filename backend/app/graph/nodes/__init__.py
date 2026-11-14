@@ -849,6 +849,8 @@ async def verify_node(state: ResearchState, config: RunnableConfig) -> dict:
                 # [P1] 传证据正文而不是条数：核查员必须能逐条核对
                 # findings 里标注的 [证据N] 是否真实、是否真的支持该结论
                 state.get("evidence", []),
+                # 同时传计划子问题：只核对「有依据」会漏掉「某个子问题没被回答」
+                plan=state.get("plan"),
             ),
             VerificationResult,
             "verify",
@@ -870,6 +872,39 @@ async def verify_node(state: ResearchState, config: RunnableConfig) -> dict:
         "steps": [{"node": "verify", "summary": f"判定：{data.verdict}", "verdict": data.verdict}],
         "usage": [{"purpose": "verify", **usage}],
     }
+
+
+# 报告篇幅硬门槛。提示词里写了「会被硬性检查」，这里就是那道检查：
+# 之前只有 total < 300 的 schema 校验，实际报告常常 800 字左右就交付，
+# 用户看到的是「深度研究」却只有几段概述。
+_MIN_SUMMARY_CHARS = 150
+_MIN_SECTION_CHARS = 200
+_MIN_SECTIONS = 3
+
+
+def _report_chars(report: ResearchReport) -> int:
+    section_chars = sum(len(section.content or "") for section in report.sections)
+    return len(report.summary or "") + section_chars
+
+
+def _report_gaps(report: ResearchReport) -> list[str]:
+    """列出报告未达到篇幅/结构要求的具体项，用于二次扩写与局限说明。"""
+    gaps: list[str] = []
+    summary_chars = len((report.summary or "").strip())
+    if summary_chars < _MIN_SUMMARY_CHARS:
+        gaps.append(
+            f"summary 只有 {summary_chars} 字，要求 {_MIN_SUMMARY_CHARS}~300 字"
+        )
+    if len(report.sections) < _MIN_SECTIONS:
+        gaps.append(f"只有 {len(report.sections)} 个小节，要求 {_MIN_SECTIONS}~6 个")
+    for index, section in enumerate(report.sections, start=1):
+        chars = len((section.content or "").strip())
+        if chars < _MIN_SECTION_CHARS:
+            heading = (section.heading or "未命名小节").strip()
+            gaps.append(
+                f"第 {index} 节「{heading}」只有 {chars} 字，要求不少于 {_MIN_SECTION_CHARS} 字"
+            )
+    return gaps
 
 
 async def write_node(state: ResearchState, config: RunnableConfig) -> dict:
@@ -895,6 +930,40 @@ async def write_node(state: ResearchState, config: RunnableConfig) -> dict:
     except LLMError as exc:
         return _failed(f"撰写报告失败：{exc.message}")
 
+    usage_records = [{"purpose": "write", **usage}]
+    gaps = _report_gaps(data)
+    if gaps:
+        logger.info("research thread=%s: 报告篇幅未达标，触发扩写：%s", thread_id, gaps)
+        try:
+            expanded, repair_usage = await _ask(
+                client,
+                prompts.write_repair_messages(
+                    state["question"],
+                    data.model_dump(),
+                    gaps,
+                    state.get("evidence", []),
+                    sources=state.get("sources"),
+                ),
+                ResearchReport,
+                "write_repair",
+            )
+            usage_records.append({"purpose": "write_repair", **repair_usage})
+            # 只有确实变长才采用，避免模型「重写得更短」把原稿也弄丢
+            if _report_chars(expanded) >= _report_chars(data):
+                data = expanded
+        except LLMError as exc:
+            logger.warning("research thread=%s: 报告扩写失败：%s", thread_id, exc.message)
+
+    remaining = _report_gaps(data)
+    if remaining:
+        # 二次扩写仍不达标：不阻断交付，但必须把「篇幅不足」写进局限，
+        # 而不是让用户以为这是一份达到深度要求的报告。
+        data.limitations = [
+            *(data.limitations or []),
+            "报告篇幅未完全达到深度要求：" + "；".join(remaining) + "。引用前请结合证据原文核对。",
+        ]
+        logger.warning("research thread=%s: 报告最终篇幅仍不达标：%s", thread_id, remaining)
+
     # [B35] 溯源兜底：报告正文若一个 [证据N] 都没标，说明写出来的实例
     # 无法对应到任何依据 —— 与其静默交付一份「看起来像那么回事」的报告，
     # 不如如实写进 limitations，让用户知道哪些结论未经证据核对。
@@ -912,7 +981,7 @@ async def write_node(state: ResearchState, config: RunnableConfig) -> dict:
         "status": "completed",
         "finished_reason": "completed",
         "steps": [_step("write", data.title)],
-        "usage": [{"purpose": "write", **usage}],
+        "usage": usage_records,
     }
 
 

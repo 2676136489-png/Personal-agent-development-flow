@@ -14,15 +14,9 @@
 
     <!--
       字体：Poppins 300–800，全站唯一字族（中文回落到系统黑体）。
-      preconnect 提前建连，display=swap 避免首屏白字闪动；
-      离线时回落到系统 sans，不影响可用性。
+      字体文件自托管在 /fonts（约 8KB/字重），不再依赖 Google Fonts ——
+      外链 CSS 是渲染阻塞资源，国内网络下会拖住首屏。
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
   </head>
   <body>
     <div id="root"></div>

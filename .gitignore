@@ -75,3 +75,9 @@ frontend/.probe-world/
 
 # 面试准备材料仅本地留存，不入库
 docs/interview/
+
+# 徽标方案预览与 HTML 分享包：本地设计/打包产物，不是项目源码，
+# 不随发布上传，也不该进仓库（每次重新生成都会带来二进制 diff 噪声）。
+logo-options/
+.trae-html-share-packages/
+.screenshots/

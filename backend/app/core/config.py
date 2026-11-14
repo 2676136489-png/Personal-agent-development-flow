@@ -289,14 +289,22 @@ class Settings(BaseSettings):
     content_security_policy: str = (
         "default-src 'self'; "
         "script-src 'self'; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com data:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
         "img-src 'self' data:; "
         "connect-src 'self' https://motionsites.org; "
         "base-uri 'self'; "
         "form-action 'self'; "
         "frame-ancestors 'none'"
     )
+
+    # ----- 生产加固：管理员令牌（写操作边界）-----
+    # 公开演示实例没有账号体系，分享码只负责「能不能打开页面」，
+    # 不负责「能不能改数据」。删除文档 / 清空历史 / 重建立向量都要求这个令牌：
+    #   - 留空 = 只读演示模式，所有写操作返回 403（推荐公开部署默认值）
+    #   - 配置后，请求头 X-Admin-Token 必须与它一致
+    # 只从环境变量 / .env.production 读取，不要在 Settings 接口里回显。
+    admin_token: SecretStr = SecretStr("")
 
     # ----- 生产加固：API 文档开关 -----
     # /api/docs 与 /api/openapi.json 会暴露全部接口结构，生产环境应关闭。

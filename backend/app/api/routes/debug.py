@@ -7,10 +7,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core.errors import recent_errors
 from app.core.responses import ApiResponse, success_response
+from app.core.security import require_admin
 
 router = APIRouter(prefix="/debug", tags=["debug"])
 
@@ -20,5 +21,7 @@ router = APIRouter(prefix="/debug", tags=["debug"])
     response_model=ApiResponse[list[dict]],
     summary="最近 20 条未处理异常（类型/消息/堆栈尾部），排查线上 500 用",
 )
-async def get_recent_errors() -> ApiResponse[list[dict]]:
+async def get_recent_errors(
+    _admin: None = Depends(require_admin),
+) -> ApiResponse[list[dict]]:
     return success_response(recent_errors())

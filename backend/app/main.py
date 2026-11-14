@@ -206,6 +206,15 @@ async def _bootstrap_knowledge() -> None:
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # 启动：先把上一个进程遗留的「运行中 / 待确认」收敛为「已中断」。
+    # checkpointer 是内存态，重启后这些记录已不可恢复，不能继续显示成可操作状态。
+    from app.graph.service import reconcile_stale_runs  # noqa: PLC0415  # 避免循环 import
+
+    try:
+        reconcile_stale_runs()
+    except Exception:  # noqa: BLE001 - 对账失败不能阻止服务启动
+        logging.getLogger(__name__).warning("启动对账未完成", exc_info=True)
+
     # 启动：知识库补齐 + 向量模型对账（不阻塞服务就绪）
     seed_task = asyncio.create_task(_bootstrap_knowledge())
     yield

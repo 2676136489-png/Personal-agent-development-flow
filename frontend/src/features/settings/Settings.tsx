@@ -2,7 +2,14 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { getRunBudget, getSettings } from '../../api/graph'
 import type { RunBudgetSnapshot } from '../../api/graph'
 import { fetchHealth } from '../../api/health'
-import { ApiClientError, apiBaseUrlForDisplay, formatResetMoment } from '../../api/client'
+import {
+  ApiClientError,
+  apiBaseUrlForDisplay,
+  formatResetMoment,
+  getAdminToken,
+  setAdminToken,
+} from '../../api/client'
+import { useAdminAccess } from '../../lib/admin'
 import type { HealthData } from '../../types/api'
 import { StatusBadge } from '../../components/StatusBadge'
 import { LoadingState } from '../../components/LoadingState'
@@ -165,6 +172,8 @@ export function Settings() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [health, setHealth] = useState<HealthState>({ status: 'loading' })
+  const admin = useAdminAccess()
+  const [tokenDraft, setTokenDraft] = useState(getAdminToken())
 
   const checkHealth = useCallback(async () => {
     setHealth({ status: 'loading' })
@@ -212,6 +221,17 @@ export function Settings() {
     void checkHealth()
   }, [checkHealth])
 
+  const saveToken = useCallback(async () => {
+    setAdminToken(tokenDraft)
+    await admin.refresh()
+  }, [admin, tokenDraft])
+
+  const clearToken = useCallback(async () => {
+    setTokenDraft('')
+    setAdminToken('')
+    await admin.refresh()
+  }, [admin])
+
   const groups = config ? buildGroups(config, budget) : []
 
   return (
@@ -227,6 +247,41 @@ export function Settings() {
         ]}
       />
       <ModelPanel />
+
+      <section className="module-section">
+        <h3 className="module-section__title">管理员权限</h3>
+        <p className="hint">
+          删除文档、清空历史与重建向量属于写操作。后端未配置 ADMIN_TOKEN 时整个实例为只读演示；
+          配置后在此输入令牌即可解锁。令牌只保存在当前标签页会话中。
+        </p>
+        <div className="field">
+          <input
+            className="input"
+            type="password"
+            autoComplete="off"
+            value={tokenDraft}
+            placeholder="输入后端 .env 中的 ADMIN_TOKEN"
+            onChange={(event) => setTokenDraft(event.target.value)}
+          />
+        </div>
+        <div className="hero-actions">
+          <button className="button button--primary" onClick={() => void saveToken()}>
+            保存并校验
+          </button>
+          <button className="button" onClick={() => void clearToken()}>
+            清除令牌
+          </button>
+          {admin.loading ? (
+            <StatusBadge variant="info">检查中…</StatusBadge>
+          ) : !admin.configured ? (
+            <StatusBadge variant="warn">后端未配置 ADMIN_TOKEN</StatusBadge>
+          ) : admin.authenticated ? (
+            <StatusBadge variant="ok">写操作已解锁</StatusBadge>
+          ) : (
+            <StatusBadge variant="error">令牌无效或未填写</StatusBadge>
+          )}
+        </div>
+      </section>
 
       {error && <ErrorState message={error} onRetry={() => void loadConfig()} />}
 

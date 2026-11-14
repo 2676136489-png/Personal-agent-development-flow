@@ -7,6 +7,7 @@ import { EmptyState } from '../../components/EmptyState'
 import { LoadingState } from '../../components/LoadingState'
 import { ErrorState } from '../../components/ErrorState'
 import { notify } from '../../components/Toast'
+import { useAdminAccess } from '../../lib/admin'
 import type { ResearchRunSummary } from '../../types/graph'
 
 export interface RunHistoryProps {
@@ -21,6 +22,7 @@ const STATUS_LABEL: Record<string, string> = {
   running: '运行中',
   failed: '失败',
   cancelled: '已取消',
+  interrupted: '已中断',
 }
 
 const STATUS_VARIANT: Record<string, 'ok' | 'warn' | 'error' | 'info' | 'running'> = {
@@ -29,6 +31,7 @@ const STATUS_VARIANT: Record<string, 'ok' | 'warn' | 'error' | 'info' | 'running
   running: 'running',
   failed: 'error',
   cancelled: 'warn',
+  interrupted: 'error',
 }
 
 function truncate(text: string, max = 80): string {
@@ -42,6 +45,8 @@ export function RunHistory({ onSelect, limit = 10, status }: RunHistoryProps) {
   const [error, setError] = useState<string | null>(null)
   // 清空需要二次确认：误点一次就全删太狠了
   const [confirmingClear, setConfirmingClear] = useState(false)
+  // 删除 / 清空是写操作：公开演示实例默认只读，解锁后才显示
+  const admin = useAdminAccess()
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -101,7 +106,7 @@ export function RunHistory({ onSelect, limit = 10, status }: RunHistoryProps) {
         <button className="link-button" onClick={() => void refresh()} disabled={loading}>
           {loading ? '刷新中…' : '刷新'}
         </button>
-        {runs.length > 0 && (
+        {runs.length > 0 && admin.authenticated && (
           <button
             className={`link-button ${confirmingClear ? 'link-button--danger' : ''}`.trim()}
             onClick={() => void handleClear()}
@@ -111,6 +116,10 @@ export function RunHistory({ onSelect, limit = 10, status }: RunHistoryProps) {
           </button>
         )}
       </div>
+
+      {runs.length > 0 && !admin.authenticated && (
+        <p className="hint">只读演示：删除与清空历史需要管理员令牌，可在「系统设置」解锁。</p>
+      )}
 
       {loading && runs.length === 0 && <LoadingState variant="list" rows={3} />}
 
@@ -134,14 +143,16 @@ export function RunHistory({ onSelect, limit = 10, status }: RunHistoryProps) {
                 <span className="run-list__q">{truncate(run.question)}</span>
                 <span className="hint">{formatRelativeTime(run.updated_at)}</span>
               </button>
-              <button
-                className="run-list__delete"
-                aria-label="删除这条记录"
-                title="删除这条记录"
-                onClick={() => void handleDelete(run.thread_id)}
-              >
-                ×
-              </button>
+              {admin.authenticated && (
+                <button
+                  className="run-list__delete"
+                  aria-label="删除这条记录"
+                  title="删除这条记录"
+                  onClick={() => void handleDelete(run.thread_id)}
+                >
+                  ×
+                </button>
+              )}
             </li>
           ))}
         </ul>

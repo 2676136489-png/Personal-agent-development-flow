@@ -45,7 +45,12 @@ const EXAMPLE_QUESTION =
   '研究 2026 年 AI Agent 开发岗位的核心技术要求，并分析不同公司的岗位要求有什么共同点。'
 
 /** 终态集合（与 types/graph.ts:5 的 RunStatus 同源）。非终态 = 本次 run 仍在进行中。 */
-const TERMINAL_STATUSES = new Set<RunStatus>(['completed', 'cancelled', 'failed'])
+const TERMINAL_STATUSES = new Set<RunStatus>([
+  'completed',
+  'cancelled',
+  'failed',
+  'interrupted',
+])
 
 /**
  * [OBS-1] 跨页 UI 自动恢复：把最近一次启动的 thread_id 落到 sessionStorage，
@@ -138,7 +143,8 @@ function buildStepItems(run: ResearchRun | null): StepItem[] {
       : lastStep?.node === 'verify' && lastStep.verdict === 'needs_more'
         ? 'research'
         : (lastStep?.node ?? null)
-  const failed = run?.status === 'failed' || run?.status === 'cancelled'
+  const failed =
+    run?.status === 'failed' || run?.status === 'cancelled' || run?.status === 'interrupted'
   const finished = run?.status === 'completed'
 
   // 已完成的最后一步下标：中间节点即便没在 steps 里出现，
@@ -179,6 +185,9 @@ function currentStepCaption(run: ResearchRun | null, items: StepItem[]): string 
   if (run.status === 'awaiting_approval') {
     return '证据已核对完毕，等待你确认后开始撰写报告。'
   }
+  if (run.status === 'interrupted') {
+    return '服务重启后这次运行已无法继续，请重新发起一次研究。'
+  }
   const active = items.find((item) => item.status === 'active')
   if (!active) {
     if (run.status === 'completed') return '研究已完成，报告已生成。'
@@ -216,6 +225,7 @@ const STATUS_VARIANT: Record<string, 'ok' | 'warn' | 'error' | 'info' | 'running
   running: 'running',
   cancelled: 'warn',
   failed: 'error',
+  interrupted: 'error',
 }
 
 const STATUS_NAME: Record<string, string> = {
@@ -224,6 +234,7 @@ const STATUS_NAME: Record<string, string> = {
   running: '运行中',
   cancelled: '已取消',
   failed: '失败',
+  interrupted: '已中断',
 }
 
 /**
@@ -1016,7 +1027,7 @@ export function ResearchWorkflow({ focusThread }: ResearchWorkflowProps) {
               </div>
               <div>
                 <b>操作路径</b>
-                <span>输入问题 → 设定最大循环轮数 → 启动 → 实时看进度 → 中断点确认/修改 → 获取最终报告。</span>
+                <span>输入问题 → 设定最大循环轮数 → 启动 → 实时看进度 → 中断点查看证据并批准 → 获取最终报告。</span>
               </div>
             </div>
           </div>

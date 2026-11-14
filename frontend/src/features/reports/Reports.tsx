@@ -20,6 +20,7 @@ const STATUS_LABEL: Record<string, string> = {
   running: '运行中',
   failed: '失败',
   cancelled: '已取消',
+  interrupted: '已中断',
 }
 
 function ReportView({ run }: { run: ResearchRun }) {

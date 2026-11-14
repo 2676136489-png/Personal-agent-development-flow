@@ -20,6 +20,7 @@ import asyncio
 import logging
 import time
 import uuid
+from datetime import datetime
 
 from app.core.config import get_settings
 from app.core.errors import AppError, ErrorCode
@@ -172,7 +173,15 @@ def _announce(thread_id: str, response: ResearchRunResponse) -> None:
 
 
 # 终态：进入这些状态后不允许再 resume（人工拒绝必须是终态）
-TERMINAL_STATUSES = frozenset({"completed", "cancelled", "failed"})
+# interrupted 也必须是终态：进程重启后内存 checkpoint 已丢失，
+# 这类运行无法恢复，只能让用户重新发起 —— 前端会显示「已中断」而不是「待确认」。
+TERMINAL_STATUSES = frozenset({"completed", "cancelled", "failed", "interrupted"})
+
+INTERRUPTED_STATUS = "interrupted"
+_PROCESS_RESTARTED_REASON = "service_restarted"
+_STALE_RUN_MESSAGE = (
+    "服务进程已重启，内存中的中断点已丢失；这次运行无法继续，请重新发起一次研究。"
+)
 
 
 def _record_run(response: ResearchRunResponse, started: float) -> None:
@@ -407,8 +416,96 @@ async def get_research(thread_id: str) -> ResearchRunResponse | None:
         return _to_response(thread_id, record["state"] or {}, next_nodes=())
 
 
+def _as_int(value: object) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+
+
+def _duration_ms(created_at: str, updated_at: str) -> int:
+    """用落库时间戳算墙钟耗时；时间格式异常时返回 0，不让统计页崩掉。"""
+    try:
+        start = datetime.fromisoformat(created_at)
+        end = datetime.fromisoformat(updated_at)
+        return max(0, int((end - start).total_seconds() * 1000))
+    except (TypeError, ValueError):
+        return 0
+
+
 def list_runs(limit: int = 20, status: str | None = None) -> list[dict]:
-    return get_run_store().list_runs(limit, status=status)
+    """历史运行列表：返回**轻量摘要**，不再把完整 state 全部塞给前端。
+
+    效果评估页需要统计耗时 / token / 失败原因，这些字段在这里一次算好；
+    完整状态仍可通过 GET /graph/research/{thread_id} 读取。
+    """
+    summaries: list[dict] = []
+    for record in get_run_store().list_runs(limit, status=status):
+        state = record.get("state") or {}
+        usage = state.get("usage") or []
+        total_tokens = sum(
+            _as_int(item.get("total_tokens"))
+            for item in usage
+            if isinstance(item, dict)
+        )
+        summaries.append(
+            {
+                "id": record["id"],
+                "thread_id": record["thread_id"],
+                "question": record["question"],
+                "status": record["status"],
+                "created_at": record["created_at"],
+                "updated_at": record["updated_at"],
+                "duration_ms": _duration_ms(record["created_at"], record["updated_at"]),
+                "usage_total_tokens": total_tokens,
+                "iteration": _as_int(state.get("iteration")),
+                "verify_attempts": _as_int(state.get("verify_attempts")),
+                "error": state.get("error"),
+                "finished_reason": state.get("finished_reason") or "",
+            }
+        )
+    return summaries
+
+
+def reconcile_stale_runs() -> int:
+    """启动对账：把上一个进程遗留的 running / awaiting_approval 标记为 interrupted。
+
+    为什么必须有：checkpointer 是 InMemorySaver，进程重启后中断点就没了。
+    如果只把记录留在库里，用户会看到一个永远点不动的「待确认」，
+    点批准只会得到 409 —— 这是线上真实出现过的死状态。
+    """
+    store = get_run_store()
+    reconciled = 0
+    stale_records = [
+        record
+        for status in ("running", "awaiting_approval")
+        for record in store.list_runs(limit=10000, status=status)
+    ]
+    for record in stale_records:
+        state = dict(record.get("state") or {})
+        state["status"] = INTERRUPTED_STATUS
+        state["finished_reason"] = _PROCESS_RESTARTED_REASON
+        state["error"] = _STALE_RUN_MESSAGE
+        store.upsert(
+            thread_id=record["thread_id"],
+            question=record.get("question") or state.get("question", ""),
+            status=INTERRUPTED_STATUS,
+            state=state,
+        )
+        # 补一条终态事件：前端恢复这类历史时会订阅/轮询事件，
+        # 没有终态事件的话连接会一直挂着空转。
+        try:
+            emit(
+                record["thread_id"],
+                EventType.TASK_FAILED,
+                {"error": _STALE_RUN_MESSAGE, "reason": _PROCESS_RESTARTED_REASON},
+            )
+        except Exception:  # noqa: BLE001 - 事件补写失败不影响状态对账
+            logger.debug("补写中断事件失败：thread=%s", record["thread_id"], exc_info=True)
+        reconciled += 1
+    if reconciled:
+        logger.info("启动对账：%s 条未完成运行已标记为 interrupted", reconciled)
+    return reconciled
 
 
 def delete_run(thread_id: str) -> bool:

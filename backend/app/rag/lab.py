@@ -247,12 +247,16 @@ async def run_pipeline(
         "files": files,
         "kept": INDEX_KEEP,
     }
+    index_summary = (
+        f"{index.count} 条向量 · 词表 {len(index.postings):,} · "
+        f"{_kb(index.vector_bytes + index.term_bytes)}"
+    )
     stages.append(
         {
             "key": "index",
             "label": "建索引",
             "ms": stage_ms,
-            "summary": f"{index.count} 条向量 · 词表 {len(index.postings):,} · {_kb(index.vector_bytes + index.term_bytes)}",
+            "summary": index_summary,
             "detail": index_payload,
         }
     )
@@ -491,7 +495,10 @@ def _persist_index(index: RetrievalIndex, run_id: str) -> list[dict]:
                     "dtype": "float32",
                     "normalized": True,
                     "avg_tokens": round(index.avg_len, 2),
-                    "postings": {term: sorted(rows.items()) for term, rows in index.postings.items()},
+                    "postings": {
+                        term: sorted(rows.items())
+                        for term, rows in index.postings.items()
+                    },
                 },
                 ensure_ascii=False,
             ),

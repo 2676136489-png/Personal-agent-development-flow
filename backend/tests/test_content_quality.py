@@ -19,9 +19,10 @@ from app.graph.graph import build_initial_state
 from app.graph.nodes import (
     _executed_actions,
     _fallback_plan,
-    plan_node,
     _pending_questions,
     _pick_retrieve_queries,
+    _report_gaps,
+    plan_node,
 )
 from app.graph.schemas import ResearchReport
 from app.llm.client import BaseLLMClient
@@ -91,6 +92,36 @@ def test_thin_report_rejected():
         )
 
 
+def test_report_gaps_flags_short_summary_and_sections():
+    """schema 放行但篇幅不达标的报告，必须被 write 节点的硬检查识别出来。"""
+    report = ResearchReport(
+        title="t",
+        summary=_long_text(100),  # 低于 150
+        sections=[
+            {"heading": "一", "content": _long_text(250)},
+            {"heading": "二", "content": _long_text(90)},  # 低于 200
+        ],
+        limitations=[],
+    )
+    gaps = _report_gaps(report)
+    assert any("summary" in item for item in gaps)
+    assert any("只有 2 个小节" in item for item in gaps)
+    assert any("第 2 节" in item for item in gaps)
+
+
+def test_verify_prompt_includes_plan_questions():
+    """核查员必须看到计划子问题，才能发现「某个子问题完全没被回答」。"""
+    messages = prompts.verify_messages(
+        "研究问题",
+        {"findings": ["结论 [证据1]"], "gaps": []},
+        ["证据正文"],
+        plan={"questions": ["现状如何？", "主要风险是什么？"]},
+    )
+    user_content = messages[1].content
+    assert "现状如何？" in user_content
+    assert "主要风险是什么？" in user_content
+
+
 def test_substantial_report_accepted():
     """合规报告：summary ≥150 字 + 小节展开后全文 ≥300 字。"""
     report = ResearchReport(
@@ -144,7 +175,10 @@ def test_fallback_plan_pads_thin_understanding():
     整条研究以 ValidationError 结束。
     """
     plan = _fallback_plan(
-        {"goal": "研究 2026 年 AI Agent 开发岗位的主要技术要求", "key_questions": ["需要哪些技术？"]}
+        {
+            "goal": "研究 2026 年 AI Agent 开发岗位的主要技术要求",
+            "key_questions": ["需要哪些技术？"],
+        }
     )
     assert len(plan.questions) >= 4
     assert len(plan.steps) >= 4
@@ -204,7 +238,10 @@ async def test_plan_node_degrades_to_fallback_instead_of_failing_run():
     config = {"configurable": {"deps": deps, "thread_id": "t-plan-fallback"}}
     state = {
         "question": "研究 2026 年 AI Agent 开发岗位的主要技术要求",
-        "understanding": {"goal": "研究 2026 年 AI Agent 岗位要求", "key_questions": ["需要哪些技术？"]},
+        "understanding": {
+            "goal": "研究 2026 年 AI Agent 岗位要求",
+            "key_questions": ["需要哪些技术？"],
+        },
     }
     result = await plan_node(state, config)  # type: ignore[arg-type]
     plan = result["plan"]

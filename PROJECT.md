@@ -32,14 +32,14 @@ RAG 流程页把一条检索链路拆成五步摊开：切块边界、2048 维�
 
 **后端**：FastAPI + LangGraph。研究工作流用图（节点 + 条件边 + 中断点）而不是一条链，因为「证据不够就再来一轮」这种回环用 if/else 写出来会很难读，而且中断恢复需要把整份 State 存下来。
 
-**前端**：React 18 + Vite 5 + TypeScript，依赖只有 5 个（react / react-dom / motion / react-markdown / remark-gfm）。没有路由库（用 hash 自己解析）、没有状态管理库、没有 UI 组件库。
+**前端**：React 18 + Vite 5 + TypeScript，依赖只有 6 个（react / react-dom / motion / react-markdown / remark-gfm / three）。没有路由库（用 hash 自己解析）、没有状态管理库、没有 UI 组件库。
 
 **模型**：统一调用层把 provider 抽象出来，换后端只改配置、业务代码零改动。
 - 支持任意 OpenAI 兼容端点（线上用智谱 GLM-4-Flash）与本地推理后端，另有离线档位供不联网场景使用
 - 带自动兜底：主后端不可用时按配置切换，并给对方一段冷却期，避免每次调用都空等一次超时
 - 联网搜索走 Tavily，带配额记账（按 credit 计），超限时降级出报告但会明说
 
-**规模**：后端 80 个 py 文件 / 约 1.38 万行，前端 55 个 ts(x) 文件 / 约 9100 行，后端 256 个测试。
+**规模**：后端 80 个 py 文件 / 约 1.38 万行，前端 59 个 ts(x) 文件 / 约 9100 行，后端 268 个测试。
 
 ---
 
@@ -145,6 +145,32 @@ main.main → transform=matrix(1,0,0,1,0,0)   animation=page-in fill=both
 ## 五、提交记录
 
 按时间倒序。每条都写了当时的动机——这些取舍比代码本身更值得留着。
+
+### 公开部署加固：权限边界、僵尸运行、报告深度与真实统计
+
+这一轮针对「公开分享链接之后才会暴露」的问题，按优先级修了四类：
+
+**1. 写操作有边界了。** 之前分享码只管「能不能打开页面」，拿到链接的人可以上传文档、
+删除文档、清空全部历史。现在后端 `ADMIN_TOKEN` 留空即只读演示，删除 / 清空 / 上传 /
+重建向量 / 调试端点一律 403；配置令牌后，前端在「系统设置 → 管理员权限」解锁，
+请求头携带 `X-Admin-Token`，令牌只放当前标签页的 `sessionStorage`。
+
+**2. 重启后的僵尸运行会被收敛。** checkpointer 是 `InMemorySaver`，进程重启后
+「运行中 / 待确认」的记录其实已经不可能恢复，但数据库里还留着，用户点批准只会拿到 409。
+启动时统一标记为 `interrupted`，前端显示「已中断」并提示重新发起，不再诱导重复操作。
+
+**3. 报告篇幅从「提示词要求」变成「代码硬检查」。** 之前 write 的提示词写着
+「会被硬性检查」，实际只校验 JSON Schema；线上多份报告 472~934 字就交付。
+现在 write 节点会逐项检查 summary ≥150 字、至少 3 节、每节 ≥200 字，不达标先带具体
+缺口让模型扩写一次；仍不达标就写进 limitations，不再把「短报告」当「深度研究」交付。
+verify 同时开始检查计划中的子问题是否都有结论，避免「所有结论都有依据，但有一半问题没回答」。
+
+**4. 效果评估页终于统计它承诺的东西。** 列表接口改为轻量摘要，直接返回耗时、token、
+失败原因；页面展示成功率、平均耗时、平均 token、状态分布与失败原因，不再只有四个计数。
+
+顺带把首屏 Poppins 改成自托管（`public/fonts`，六个字重共约 47KB），删掉 Google Fonts
+外链——它是渲染阻塞资源，国内网络下会拖住首屏；CSP 也相应收紧了 `font-src` / `style-src`。
+补了最小 CI（ruff + pytest + 前端构建），目前后端 268 个测试通过。
 
 ### 视觉重构：深空蓝控制台 → 纯黑 + 玻璃立方体首屏
 
@@ -288,7 +314,7 @@ npm run dev                       # 5173，通过 VITE_API_BASE_URL 指向后端
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest tests -q      # 256 passed
+.venv/Scripts/python -m pytest tests -q      # 268 passed
 .venv/Scripts/python -m ruff check app/ tests/
 ```
 

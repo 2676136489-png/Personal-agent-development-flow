@@ -12,7 +12,7 @@
 
 ![概览页](docs/images/overview.jpg)
 
-8 个模块均可用（概览 / 深度研究 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程），后端 256 个测试通过。架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)，项目整体说明与关键设计取舍见 [`PROJECT.md`](PROJECT.md)。
+8 个模块均可用（概览 / 深度研究 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程），后端 268 个测试通过。架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)，项目整体说明与关键设计取舍见 [`PROJECT.md`](PROJECT.md)。
 
 ---
 
@@ -85,7 +85,7 @@ backend/app/
 ├── events/                 事件总线 + 落库（可回放）
 ├── observability/          指标与追踪
 ├── tools/                  search_web / fetch_webpage / calculate / search_knowledge_base
-└── tests/                  256 passed
+└── tests/                  268 passed
 
 frontend/src/
 ├── features/               8 个页面：概览 / 深度研究 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程
@@ -130,6 +130,18 @@ npm run dev                       # 127.0.0.1:5173
 模型层是可插拔的：填一个 OpenAI 兼容端点的 Key 即可直接跑，也支持本地推理后端与离线档位。
 切换只改 `.env` 里的 `LLM_PROVIDER`，业务代码零改动，详见 [`docs/llm-provider.md`](docs/llm-provider.md)。
 
+### 4.1 写操作与管理员令牌
+
+公开部署时，分享码只决定「能不能打开页面」，不决定「能不能改数据」。上传文档、
+删除文档、清空历史、重建向量都需要管理员令牌：
+
+- `ADMIN_TOKEN` 留空 → 实例为**只读演示**，所有写接口返回 403；
+- 配置后 → 在「系统设置 → 管理员权限」输入同一个令牌解锁，请求头为 `X-Admin-Token`；
+- 令牌只保存在当前标签页的 `sessionStorage`，不会写进 URL 或日志；
+- `/api/debug/recent-errors` 同样要求管理员令牌。
+
+这是公开演示的最小权限边界；如果需要多用户隔离，仍需接入正式账号体系。
+
 ---
 
 ## 5. API
@@ -168,7 +180,14 @@ npm run dev                       # 127.0.0.1:5173
 | GET | `/api/llm/provider` · `/api/llm/ping` | 当前生效的模型配置（**不含密钥**）/ 真打一次模型 |
 | POST | `/api/llm/stream` | 流式自测（逐块返回） |
 | GET | `/api/settings` · `/api/settings/run-budget` · `/api/settings/usage` | 配置 / 当日预算 / 用量 |
+| GET | `/api/admin/status` | 管理员令牌是否已配置、当前令牌是否有效（只返回布尔值）|
 | GET | `/api/health` | 存活探针（带指标快照） |
+
+> 删除运行、清空历史、上传 / 删除文档、重建向量与 `/api/debug/*` 需要请求头
+> `X-Admin-Token`；后端未配置 `ADMIN_TOKEN` 时这些接口一律返回 403。
+>
+> `/api/agent/*` 与 `/api/research/plan` 属于后端能力接口，当前 8 个页面没有为它们
+> 挂独立入口，保留用于脚本调用与二次集成；不要把「接口存在」理解成「页面已实现」。
 
 **RAG 实验台**
 
@@ -199,7 +218,7 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 | 2 | 人工确认 | 填意见 → 批准 | 状态 `completed`，出现 Report（含 sections / limitations） |
 | 3 | 拒绝 | 点「拒绝并终止」 | 状态 `cancelled`，无报告 |
 | 4 | 循环 | 看 Pipeline | `Research ×N`（N ≤ max_iterations） |
-| 5 | 单元测试 | `.venv/Scripts/python -m pytest tests` | `256 passed` |
+| 5 | 单元测试 | `.venv/Scripts/python -m pytest tests` | `268 passed` |
 | 6 | 静态检查 | `.venv/Scripts/python -m ruff check app tests` | `All checks passed!` |
 | 7 | 前端类型 | `npm run typecheck` | 无输出 |
 | 8 | 布局与跳转 | `frontend/scripts/` 下的 CDP 探针脚本 | 元素几何 / 跳转落地状态符合断言 |

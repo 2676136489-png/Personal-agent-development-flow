@@ -97,7 +97,7 @@ try {
 
   expect('外壳：.site-shell 渲染', app.includes('class="site-shell"'))
   expect(
-    '顶栏：白半圆 logo-mark + 双段字标',
+    '顶栏：光圈 logo-mark + 双段字标',
     app.includes('logo-mark') && /<b>Research<\/b>/.test(app) && /<span>Workspace<\/span>/.test(app),
   )
   expect(

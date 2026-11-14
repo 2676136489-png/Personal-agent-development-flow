@@ -118,14 +118,24 @@ export type NavigateFn = (key: string, threadId?: string) => void
 /* ===================== 徽标 ===================== */
 
 /**
- * 白色半圆的进化：外半圆减去内半圆，得到一枚粗半环。
- * 它保留老标记的「D」形轮廓，中间的空洞让它像镜头 / 光圈——
- * 从一块空白，变成一个有焦点的形状。单色、无渐变，16px 仍清晰。
+ * 光圈：三段弧围住一个中心点，像镜头光圈，也像研究过程中不断收窄的视野。
+ * 单色、无渐变；弧的缺口与中心点在 16px 下仍能分辨。
  */
 export function LogoMark() {
   return (
-    <svg className="logo-mark" viewBox="0 0 18 36" aria-hidden="true" focusable="false">
-      <path fillRule="evenodd" d="M0 0A18 18 0 0 1 0 36ZM0 9A9 9 0 0 1 0 27Z" />
+    <svg className="logo-mark" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+      <circle
+        cx="24"
+        cy="24"
+        r="15"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.8"
+        strokeLinecap="round"
+        strokeDasharray="20 11.42"
+        transform="rotate(-90 24 24)"
+      />
+      <circle cx="24" cy="24" r="3.6" fill="currentColor" />
     </svg>
   )
 }
