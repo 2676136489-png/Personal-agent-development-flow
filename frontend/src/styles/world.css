@@ -519,32 +519,37 @@ code {
   border-bottom-color: var(--line-soft);
 }
 
-/* 徽标：白半圆 + 粗体名词 + 细体名词，就是页面里那个 logo-mark 的放大版 */
+/* 徽标：定制 R + 粗体名词 + 细体名词。
+   R 的字碗是正圆镂空，像镜头，也保留老半圆的「D」轮廓记忆；
+   悬停时整枚字标轻轻侧转，像盖章，而不是把字形压扁。 */
 .logo {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 0;
   flex: none;
   color: #fff;
-  font-size: 15px;
+  font-size: 16px;
   letter-spacing: -0.01em;
   line-height: 1;
 }
 
 .logo-mark {
-  width: 18px;
-  height: 36px;
-  background: #fff;
-  border-radius: 0 18px 18px 0;
-  transition: transform 0.5s var(--ease);
+  width: auto;
+  height: 30px;
+  margin-right: 10px;
+  flex: none;
+  fill: currentColor;
+  overflow: visible;
+  transition: transform 0.55s var(--ease);
 }
 
 .logo:hover .logo-mark {
-  transform: scaleX(0.62);
-  transform-origin: left center;
+  transform: rotate(-6deg);
+  transform-origin: 50% 50%;
 }
 
 .logo b {
+  margin-right: 4px;
   font-weight: 700;
 }
 .logo span {
@@ -2839,16 +2844,17 @@ input[type="checkbox"]:checked::after {
     font-size: 12.5px;
   }
   .logo {
-    font-size: 13px;
-    gap: 7px;
+    font-size: 14px;
   }
   .logo span {
     display: none;
   }
+  .logo b {
+    margin-right: 0;
+  }
   .logo-mark {
-    width: 14px;
-    height: 28px;
-    border-radius: 0 14px 14px 0;
+    height: 24px;
+    margin-right: 8px;
   }
   /* 文字让位：目录收成一个 26px 的圆点按钮，仍可点开全站索引 */
   .nav-index {

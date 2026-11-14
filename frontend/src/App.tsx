@@ -115,6 +115,26 @@ function readHashThread(): string | null {
 
 export type NavigateFn = (key: string, threadId?: string) => void
 
+/* ===================== 徽标 ===================== */
+
+/**
+ * 字母 R 的定制字形：左侧实心竖干 + 圆形字碗（镂空成正圆，像一枚镜头），
+ * 斜腿落到基线。字碗的正圆是「聚焦」，斜腿是「从结论回到证据的那条线」。
+ * 单色、无渐变，缩小到 16px 仍能认出是 R。
+ */
+export function LogoMark() {
+  return (
+    <svg className="logo-mark" viewBox="0 0 26 36" aria-hidden="true" focusable="false">
+      <rect x="0" y="0" width="4.4" height="36" />
+      <path
+        fillRule="evenodd"
+        d="M4.4 0h7.4a9.2 9.2 0 0 1 0 18.4H4.4zm8.3 5.3a3.9 3.9 0 1 0 0 7.8 3.9 3.9 0 0 0 0-7.8z"
+      />
+      <path d="M10.2 18.4 21.4 36h4.4L13.8 18.4z" />
+    </svg>
+  )
+}
+
 /* ===================== App ===================== */
 
 export default function App() {
@@ -199,7 +219,7 @@ export default function App() {
               navigate('dashboard')
             }}
           >
-            <i className="logo-mark" aria-hidden="true" />
+            <LogoMark />
             <b>Research</b>
             <span>Workspace</span>
           </a>
@@ -245,7 +265,7 @@ export default function App() {
           <div className="index-layer" id="site-index" role="dialog" aria-modal="true" aria-label="全站目录">
             <div className="index-layer__head">
               <span className="logo">
-                <i className="logo-mark" aria-hidden="true" />
+                <LogoMark />
                 <b>Research</b>
                 <span>Workspace</span>
               </span>
