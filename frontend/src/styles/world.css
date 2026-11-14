@@ -414,14 +414,14 @@ code {
   animation: page-in 0.42s var(--ease) both;
 }
 
+/* 只做淡入，不做位移：任何非 none 的 transform 都会劫持后代的
+   position: fixed 包含块（侧栏会跟着整页滚动，而不是钉在视口上）。 */
 @keyframes page-in {
   from {
     opacity: 0;
-    transform: translateY(12px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 
@@ -1628,6 +1628,8 @@ input[type="checkbox"]:checked::after {
 
 .doc-layout__main {
   min-width: 0;
+  /* 侧栏脱离文档流后，正文仍要占住第二列 */
+  grid-column: 2;
 }
 
 /* 侧栏与正文首节顶端对齐：首节不再加自己的段前距 */
@@ -1636,14 +1638,32 @@ input[type="checkbox"]:checked::after {
   border-top: 0;
 }
 
+/* 侧栏固定在视口左侧、垂直居中，不随正文滚动。
+   纵向用 50vh 而不是 50%：视口单位不受祖先包含块影响，稳。 */
 .section-nav {
-  position: sticky;
-  top: 112px;
-  align-self: start;
-  padding-top: 8px;
+  position: fixed;
+  top: 50vh;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: calc(var(--z-nav) - 1);
+  pointer-events: none;
+}
+
+/* 内层与页面容器同宽同内边距，保证侧栏左边缘跟正文列对齐 */
+.section-nav__inner {
+  pointer-events: auto;
+  width: 100%;
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 var(--pad-x);
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  column-gap: clamp(32px, 6vw, 80px);
 }
 
 .section-nav__title {
+  grid-column: 1;
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -1652,6 +1672,7 @@ input[type="checkbox"]:checked::after {
 }
 
 .section-nav ul {
+  grid-column: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2744,9 +2765,22 @@ input[type="checkbox"]:checked::after {
   .doc-layout {
     grid-template-columns: minmax(0, 1fr);
   }
+  .doc-layout__main {
+    grid-column: 1;
+  }
   .section-nav {
     position: static;
     order: -1;
+    top: auto;
+    left: auto;
+    right: auto;
+    transform: none;
+    pointer-events: auto;
+  }
+  .section-nav__inner {
+    max-width: none;
+    padding: 0;
+    display: block;
   }
   .section-nav ul {
     flex-direction: row;

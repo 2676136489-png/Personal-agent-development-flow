@@ -166,7 +166,7 @@ export function Tutorial({ onNavigate }: { onNavigate?: NavigateFn }) {
               {MODULES.map((m) => {
                 const Icon = m.icon
                 return (
-                  <StaggerItem key={m.name}>
+                  <StaggerItem key={m.name} className="module-cell">
                     <div className="module">
                       <div className="module__head">
                         <span className="module__icon"><Icon size={21} /></span>

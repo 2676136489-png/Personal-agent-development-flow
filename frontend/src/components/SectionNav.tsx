@@ -49,21 +49,23 @@ export function SectionNav({
 
   return (
     <nav className="section-nav" aria-label={title}>
-      <p className="section-nav__title">{title}</p>
-      <ul>
-        {items.map((item) => (
-          <li key={item.id}>
-            <a
-              href={`#${item.id}`}
-              className={active === item.id ? 'is-active' : ''}
-              aria-current={active === item.id ? 'true' : undefined}
-              onClick={(e) => go(e, item.id)}
-            >
-              {item.label}
-            </a>
-          </li>
-        ))}
-      </ul>
+      <div className="section-nav__inner">
+        <p className="section-nav__title">{title}</p>
+        <ul>
+          {items.map((item) => (
+            <li key={item.id}>
+              <a
+                href={`#${item.id}`}
+                className={active === item.id ? 'is-active' : ''}
+                aria-current={active === item.id ? 'true' : undefined}
+                onClick={(e) => go(e, item.id)}
+              >
+                {item.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
     </nav>
   )
 }

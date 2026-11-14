@@ -281,6 +281,12 @@
   background: var(--line);
 }
 
+/* 格子本身承载黑底。卡片内容不等高时，多出来的那一截要靠格子填，
+   否则会露出网格背景（灰线色），在矮卡片下方形成一条灰块。 */
+.module-cell {
+  background: #000;
+}
+
 .module {
   padding: 28px;
   background: #000;

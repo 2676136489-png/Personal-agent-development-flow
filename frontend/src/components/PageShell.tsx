@@ -20,9 +20,10 @@ export function PageShell({ children }: { children: ReactNode }) {
   return (
     <m.div
       className="page-swap"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
+      // 只动透明度，不动位移：非 none 的 transform 会劫持后代 fixed 的包含块
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       transition={{
         duration: 0.32,
         // 出场缓动：快起慢收，跟 redesign.css 的 --ease-out-expo 一致
