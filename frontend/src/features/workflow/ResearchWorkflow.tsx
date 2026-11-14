@@ -196,23 +196,6 @@ function currentStepCaption(run: ResearchRun | null, items: StepItem[]): string 
   return lastStep?.summary ? `${def?.label}：${lastStep.summary}` : def?.hint
 }
 
-/**
- * 回炉说明：把 iteration / verify_attempts 这两个后端指标翻译成一句人话。
- *
- * 为什么需要它：步骤条上的 ×N 只说明「这一步重复执行过」，但没解释为什么重复 ——
- * 用户看到「核对验证 ×2」会怀疑是不是出错了。这里明说「验证未通过 → 自动补检索」。
- * 只在真的发生过回炉（轮次 > 1 或核对 > 1）时返回，不多说废话。
- */
-function reworkCaption(run: ResearchRun | null): string | undefined {
-  if (!run) return undefined
-  if (run.iteration <= 1 && run.verify_attempts <= 1) return undefined
-  const scope = `${run.iteration} 轮研究检索、${run.verify_attempts} 次证据核对`
-  if (TERMINAL_STATUSES.has(run.status)) {
-    return `本次共完成 ${scope}；数字大于 1 即表示经历过「验证未通过 → 自动回炉补检索」。`
-  }
-  return `验证未一次通过，已回炉：当前为第 ${scope}。`
-}
-
 const STREAM_STATUS_LABEL: Record<StreamStatus, string> = {
   idle: '未连接',
   connecting: '连接中…',
@@ -782,7 +765,6 @@ export function ResearchWorkflow({ focusThread }: ResearchWorkflowProps) {
   const phaseItems = useMemo(() => buildPhaseTimeline(events), [events])
   const stepItems = useMemo(() => buildStepItems(run), [run])
   const stepCaption = currentStepCaption(run, stepItems)
-  const stepRework = reworkCaption(run)
 
   return (
     <section className="page page--flush">
@@ -900,8 +882,6 @@ export function ResearchWorkflow({ focusThread }: ResearchWorkflowProps) {
                   : '启动中'
               }
             />
-            {/* 回炉说明：只在真的发生过「验证未通过 → 自动补检索」时出现 */}
-            {stepRework && <p className="hint note-line stack-top-sm">{stepRework}</p>}
           </div>
         )}
 
@@ -1105,10 +1085,6 @@ function RunView({
             <span className="run-metric__label">累计 Tokens</span>
           </div>
         </div>
-        <p className="hint note-line stack-top-sm">
-          研究轮次＝检索循环跑了几圈；核对次数大于 1 表示验证后回炉补搜过；证据条数＝可引用的证据片段总数。
-        </p>
-
         <div className="run-card__meta run-card__meta--end">
           <button className="link-button" onClick={onRefresh}>
             刷新状态
@@ -1176,11 +1152,11 @@ function RunView({
 
       {run.verification && (
         <div className="card card--pad-sm">
-          <div className="alert__row">
+          <div className="run-card__head">
+            <h3 className="run-card__title">证据核对结果</h3>
             <StatusBadge variant={run.verification.verdict === 'pass' ? 'ok' : 'warn'}>
               {run.verification.verdict === 'pass' ? '验证通过' : '需要补充'}
             </StatusBadge>
-            <span className="hint note-line">证据核对结果</span>
           </div>
           {run.verification.reasons.length > 0 && (
             <ul className="data-list stack-top-sm">
@@ -1197,11 +1173,6 @@ function RunView({
               <div className="plan__heading stack-top-md">
                 仍未补齐的证据（{run.verification.missing.length}）
               </div>
-              <p className="hint note-line">
-                {run.status === 'completed'
-                  ? '这些点一直没有被证据覆盖，报告的相关结论会因此受限。'
-                  : '这些点会被退回「研究检索」自动补搜，再重新分析、核对。'}
-              </p>
               <ul className="data-list">
                 {run.verification.missing.map((item, i) => (
                   <li key={i} className="data-list__item">

@@ -73,10 +73,6 @@ export function EvidencePanel({ findings, gaps, sources }: EvidencePanelProps) {
           <h3 className="title-sm">
             结论与依据
           </h3>
-          <p className="hint note-line">
-            结论末尾的 [证据N] 是分析阶段的内部证据编号；可逐条点开核对的原始页面见下方「依据来源」。
-            缺口一节明说哪些问题没有被证据覆盖 —— 结论的适用范围以此为准。
-          </p>
         </div>
 
         {findings.length > 0 && (
@@ -96,9 +92,6 @@ export function EvidencePanel({ findings, gaps, sources }: EvidencePanelProps) {
         {gaps.length > 0 && (
           <div>
             <div className="plan__heading">证据缺口（{gaps.length}）</div>
-            <p className="hint note-line note-line--before">
-              这些地方没查到足够证据，结论的置信度因此受限：
-            </p>
             <ul className="data-list">
               {gaps.map((gap, i) => (
                 <li className="data-list__item" key={i}>

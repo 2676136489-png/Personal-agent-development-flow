@@ -315,10 +315,6 @@ code {
   padding-top: 12px;
   border-top: 1px solid var(--line-soft);
 }
-.note-line--before {
-  padding-top: 14px;
-  border-top: 1px solid var(--line-soft);
-}
 
 .mono-line {
   font-family: var(--mono);

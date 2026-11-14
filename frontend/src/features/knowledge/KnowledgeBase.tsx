@@ -240,12 +240,11 @@ function EmbeddingBanner({
               {active.dims ? ` · ${active.dims} 维` : ''}
             </span>
           </p>
-          <p className="kb-status__desc">
-            {status.semantic
-              ? `「换个说法也能找到」依赖这个模型。共 ${status.documents} 篇文档、${status.chunks} 个片段；切块方式 ${status.chunk_strategy}（${status.chunk_size} 字 / 重叠 ${status.chunk_overlap}）。`
-              : (status.degraded_reason ??
-                '没有可用的向量模型，检索退化成关键词重合度匹配。')}
-          </p>
+          {!status.semantic && (
+            <p className="kb-status__desc">
+              {status.degraded_reason ?? '没有可用的向量模型，检索退化成关键词重合度匹配。'}
+            </p>
+          )}
         </div>
       </div>
       {status.stale_documents > 0 && (
