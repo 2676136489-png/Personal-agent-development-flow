@@ -969,6 +969,8 @@ code {
 .section {
   padding: clamp(52px, 7.5vw, 104px) 0;
   border-top: 1px solid var(--line-soft);
+  /* 锚点跳转时留出固定顶栏的高度，否则章节标题会被压在顶栏下面 */
+  scroll-margin-top: 96px;
 }
 .section:first-child {
   border-top: 0;
