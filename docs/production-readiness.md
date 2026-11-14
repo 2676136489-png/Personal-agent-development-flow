@@ -39,7 +39,7 @@
 | 项 | 说明 |
 |---|---|
 | 安全响应头 | 新增纯 ASGI `SecurityHeadersMiddleware`：`X-Content-Type-Options`、`X-Frame-Options: DENY`、`Referrer-Policy`、`Permissions-Policy`、`Cross-Origin-Opener-Policy`、`CSP`，生产环境追加 `HSTS`。 |
-| CSP | `default-src 'self'`；脚本仅同源（构建产物无内联脚本）；样式与字体均同源（字体已自托管，不再放行 Google Fonts）；`connect-src` 额外精确放行首屏玻璃立方体的 GLB 来源（`https://motionsites.org`，不写通配）。可用 `CONTENT_SECURITY_POLICY` 覆盖或置空关闭。 |
+| CSP | `default-src 'self'`；脚本仅同源（构建产物无内联脚本）；样式、字体与首屏 GLB 模型均同源（字体与模型已自托管，不再放行 Google Fonts / 第三方模型站）；`connect-src 'self'`。可用 `CONTENT_SECURITY_POLICY` 覆盖或置空关闭。 |
 | GZip 压缩 | 只对 `/assets` 静态挂载点启用 —— **不给全局加** `GZipMiddleware`，因为那会缓冲压缩 SSE 事件流。 |
 | 静态缓存策略 | `/assets/*`（内容哈希）→ `public, max-age=31536000, immutable`；`index.html` → `no-cache`。杜绝「部署后旧 HTML 指向已删 chunk → 白屏」。 |
 | 生产关闭 API 文档 | `API_DOCS_ENABLED=false` 时 `/api/docs`、`/api/openapi.json` 返回 404。 |

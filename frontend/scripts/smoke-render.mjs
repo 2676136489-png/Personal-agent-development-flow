@@ -230,7 +230,7 @@ try {
 
   /* ============ three.js：玻璃渲染管线契约 ============ */
   const hero = read('src/features/hero/GlassHero.tsx')
-  expect('three：直接加载规格里的 GLB 地址', hero.includes('https://motionsites.org/assets/prompt-media/fa96096e78c8153a70d2.glb'))
+  expect('three：加载本地 GLB 模型', hero.includes("MODEL_URL = '/models/glass.glb'"))
   expect('three：GLB 失败回落 RoundedBoxGeometry', hero.includes('RoundedBoxGeometry(1, 1, 1, 8, 0.12)'))
   expect('three：合并顶点 + 合并网格', hero.includes('mergeVertices(') && hero.includes('mergeGeometries('))
   expect(

@@ -60,7 +60,7 @@ END
 
 视觉语言只保留黑白两色：Poppins 300–800、1.5px 描边、6/10px 圆角、全站不用阴影。颜色只留给状态（完成 / 失败 / 警示），其余层级全部由字重、字距和留白表达。设计系统拆成两个文件：`styles/world.css` 放全站语法（排版 / 按钮 / 表单 / 卡片 / 状态 / 导航），`styles/world-pages.css` 放各页面版面，两者都不含业务逻辑。
 
-> 首屏那个模型由浏览器直接从设计稿指定的地址拉取；CSP 只放行这一个域名，不写成 `https:` 通配。加载失败时回落到 `RoundedBoxGeometry`，首屏不会因此空掉。
+> 首屏模型已下载到 `frontend/public/models/glass.glb`，由站点同源提供，不再依赖第三方地址；CSP 的 `connect-src` 只保留 `'self'`。加载失败或 8 秒未完成时回落到 `RoundedBoxGeometry`，首屏不会因此空掉。
 
 ---
 
@@ -142,6 +142,33 @@ npm run dev                       # 127.0.0.1:5173
 
 这是公开演示的最小权限边界；如果需要多用户隔离，仍需接入正式账号体系。
 
+### 4.2 静态资源与外部服务边界
+
+**静态资源已全部本地化，运行时不再请求 CDN**：
+
+- 字体：`frontend/public/fonts`（Poppins 300–800，含 OFL 授权）
+- 首屏 3D 模型：`frontend/public/models/glass.glb`
+- favicon、界面图标、文档截图：仓库内文件
+- 前端构建产物：`backend/webapp`，由 FastAPI 同源托管
+
+**运行时仍需调用以下外部服务；它们属于服务依赖，不属于静态资源**：
+
+- LLM / Embedding：默认使用智谱 OpenAI 兼容端点
+- 联网检索：默认使用 Tavily
+- 研究过程中按需抓取的网页：由用户任务触发，属于产品能力
+
+如需**完全离线运行**，可切换为以下配置：
+
+```bash
+LLM_PROVIDER=mock          # 或 ollama（本地模型）
+EMBEDDING_PROVIDER=hash    # 本地哈希向量，仅字面匹配
+SEARCH_PROVIDER=stub       # 内置离线语料，不联网
+TAVILY_API_KEY=
+```
+
+npm 依赖通过 `package-lock.json` 锁定，Python 依赖通过 `uv.lock` / `pyproject.toml` 锁定。
+上述依赖仅在构建与安装阶段使用，运行时不从外部拉取代码。
+
 ---
 
 ## 5. API
@@ -186,8 +213,8 @@ npm run dev                       # 127.0.0.1:5173
 > 删除运行、清空历史、上传 / 删除文档、重建向量与 `/api/debug/*` 需要请求头
 > `X-Admin-Token`；后端未配置 `ADMIN_TOKEN` 时这些接口一律返回 403。
 >
-> `/api/agent/*` 与 `/api/research/plan` 属于后端能力接口，当前 8 个页面没有为它们
-> 挂独立入口，保留用于脚本调用与二次集成；不要把「接口存在」理解成「页面已实现」。
+> `/api/agent/*` 与 `/api/research/plan` 属于后端能力接口，当前 8 个页面未提供独立入口，
+> 保留用于脚本调用与二次集成；接口存在不代表页面已实现。
 
 **RAG 实验台**
 
@@ -260,7 +287,7 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 
 ## 9. 范围边界
 
-这几条是**有意识划出去的**，不是待办：
+以下范围是**有意排除的**，不属于待办事项：
 
 | 不做 | 原因 |
 |---|---|

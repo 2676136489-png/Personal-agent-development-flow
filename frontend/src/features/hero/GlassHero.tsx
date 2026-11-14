@@ -21,7 +21,11 @@ import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferG
  *    重建 RGB。色散不是叠一层渐变，而是真的按不同折射率偏移采样位置。
  */
 
-const MODEL_URL = 'https://motionsites.org/assets/prompt-media/fa96096e78c8153a70d2.glb'
+// 模型已下载到 public/models/glass.glb，由同源提供，不再从第三方站点实时拉取。
+// 原地址：https://motionsites.org/assets/prompt-media/fa96096e78c8153a70d2.glb
+// SHA-256：047A996E8EF10A97C23FEFEFD66FB36D9FE235659075DC4DD7891B22AD3CAEE6
+// 注意：这是第三方设计资源，商用或再分发前请确认原始授权。
+const MODEL_URL = '/models/glass.glb'
 
 const BG_VERT = /* glsl */ `
   varying vec2 vUv;

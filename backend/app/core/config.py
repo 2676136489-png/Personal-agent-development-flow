@@ -292,7 +292,7 @@ class Settings(BaseSettings):
         "style-src 'self' 'unsafe-inline'; "
         "font-src 'self' data:; "
         "img-src 'self' data:; "
-        "connect-src 'self' https://motionsites.org; "
+        "connect-src 'self'; "
         "base-uri 'self'; "
         "form-action 'self'; "
         "frame-ancestors 'none'"
