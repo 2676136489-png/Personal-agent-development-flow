@@ -1,18 +1,18 @@
 # AI Research Workspace
 
-一个 **Evidence-first（证据优先）的 AI 研究工作台**。输入复杂研究任务，LangGraph 驱动的工作流自动理解任务、制定计划、调用工具（联网搜索 / 抓取网页 / 计算 / 查知识库）收集证据、分析、验证，在写报告前**中断等待人工确认**，产出带来源的研究报告。
+基于 LangGraph 的 AI 研究工作台，采用证据优先（evidence-first）设计。输入研究任务后，工作流依次完成任务理解、计划制定、工具调用（联网搜索 / 网页抓取 / 计算 / 知识库检索）、证据分析与验证，在生成报告前中断等待人工确认，输出带来源引用的研究报告。
 
-**在线入口（永久）：<https://2676136489-png.github.io/personal-design/demo/research.html>**
-（GitHub Pages 托管，地址长期稳定；自动跳转到下面的在线系统）
+**永久入口**：<https://2676136489-png.github.io/personal-design/demo/research.html>
+（GitHub Pages 托管，自动跳转至在线系统）
 
-**在线地址：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/?sharecode=JJ4JF7TBGM>**
-（托管平台要求链接带分享码；代码重发布后分享码会更新，以仓库最新文档为准）
+**在线地址**：<https://ebed98754f5b4e4abafe591d754aff06.app.workbuddy.host/?sharecode=JJ4JF7TBGM>
+（托管平台要求链接携带分享码；重新发布后分享码更新，以仓库最新文档为准）
 
-打开就能用，无需配置环境：模型接智谱 GLM-4-Flash，联网检索接 Tavily。线上是单端口托管——前端产物由 FastAPI 一起提供，`/` 是页面、`/api/*` 是接口。
+在线实例无需配置环境：模型接入智谱 GLM-4-Flash，联网检索接入 Tavily。线上采用单端口托管，前端产物由 FastAPI 提供，`/` 为页面，`/api/*` 为接口。
 
 ![概览页](docs/images/overview.jpg)
 
-8 个模块均可用（概览 / 深度研究 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程），后端 268 个测试通过。架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)，项目整体说明与关键设计取舍见 [`PROJECT.md`](PROJECT.md)。
+8 个模块均可用（概览 / 深度研究 / 知识库 / RAG 流程 / 研究报告 / 效果评估 / 系统设置 / 使用教程），后端 268 项测试通过。架构与完整路线见 [`docs/01-architecture.md`](docs/01-architecture.md)，协作方式见 [`docs/00-collaboration.md`](docs/00-collaboration.md)，项目整体说明与关键设计取舍见 [`PROJECT.md`](PROJECT.md)。
 
 ---
 
@@ -206,7 +206,7 @@ npm 依赖通过 `package-lock.json` 锁定，Python 依赖通过 `uv.lock` / `p
 | POST | `/api/knowledge/search` | 检索知识库 |
 | GET | `/api/knowledge/status` | 当前向量后端 / 维度 / 是否具备语义能力 / 待重建文档数 |
 | POST | `/api/knowledge/reindex?force=` | 按当前向量模型重建索引 |
-| GET | `/api/llm/provider` · `/api/llm/ping` | 当前生效的模型配置（**不含密钥**）/ 真打一次模型 |
+| GET | `/api/llm/provider` · `/api/llm/ping` | 当前生效的模型配置（**不含密钥**）/ 实际调用一次模型 |
 | POST | `/api/llm/stream` | 流式自测（逐块返回） |
 | GET | `/api/settings` · `/api/settings/run-budget` · `/api/settings/usage` | 配置 / 当日预算 / 用量 |
 | GET | `/api/admin/status` | 管理员令牌是否已配置、当前令牌是否有效（只返回布尔值）|
@@ -257,15 +257,13 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 | 11 | RAG 实验台 | `node scripts/probe-rag-page.cjs <地址>` | 四条横区按序堆叠、每区「选项在左 / 详情在右」、详情含官方文档链接、回显正确、五张图齐、色带段数=块卡片数、斜纹重叠>0、倒排索引有词与块号且索引落盘出两个文件、无横向溢出 |
 | 12 | 文档截图 | `node scripts/docs-screenshots.cjs <地址>` | `docs/images/` 下 6 张首屏图，页面已渲染完（非骨架屏） |
 
-配色不靠肉眼定：`world.css` 里文字与底的组合都按 WCAG 2.1 取值（正文 ≥ 4.5:1）
-（浅底正文 ≥5.0:1，深底 ≥6.5:1）。第 9/10 项针对的是「改了样式但没真生效」——
-渐变被高优先级规则盖掉、字体声明了却没下载，这些光看计算样式发现不了，得进真浏览器。
+配色按 WCAG 2.1 取值，`world.css` 中文字与底色的组合均满足对比度要求（正文 ≥ 4.5:1，浅底 ≥ 5.0:1，深底 ≥ 6.5:1）。第 9、10 项用于验证样式实际生效：渐变被高优先级规则覆盖、字体声明未下载等问题无法通过计算样式发现，需在真实浏览器中检查。
 
 **实测结果**：`understand_task → plan → research ×3 → retrieve → analyze → verify`（中断）→ 批准 → `completed` + 报告；重启进程后仍能查到 `completed` 与报告（来自 `agent_runs` 落库）。
 
 ---
 
-## 7. 防失控的四道闸
+## 7. 运行约束
 
 | 闸 | 位置 | 作用 |
 |---|---|---|
@@ -289,14 +287,14 @@ curl -s -X POST http://127.0.0.1:8000/api/graph/research/<thread_id>/resume \
 
 ## 9. 范围边界
 
-以下范围是**有意排除的**，不属于待办事项：
+以下范围为**明确排除**，不属于待办事项：
 
 | 不做 | 原因 |
 |---|---|
-| Multi-Agent | 7 个节点共享同一份 State 和同一个 LLM client —— 它们是一个 Agent 的**阶段**。拆成多个 Agent 只是多一层消息传递与状态同步，职责并没有变化 |
-| 复杂 Memory | `messages` + State 里的 evidence 列表够用。向量记忆是另一个问题，和「结论能不能溯源」无关 |
-| 并行子问题检索 | 检索只占整轮耗时的零头，并行省不下时间，却要为 State 合并与「部分子问题失败」的收敛多加一层判断 |
-| 跨进程恢复 | 见 §8。换成 SQLite checkpointer 是配置级改动，等真有多实例需求再上 |
+| Multi-Agent | 7 个节点共享同一份 State 与同一个 LLM client，属于单个 Agent 的不同阶段。拆分为多个 Agent 仅增加消息传递与状态同步，职责不变 |
+| 复杂 Memory | 现有 `messages` 与 State 中的 evidence 列表已满足需求；向量记忆属于独立问题，与结论溯源无关 |
+| 并行子问题检索 | 检索耗时占比较低，并行收益有限，同时需为 State 合并与部分子问题失败增加收敛判断 |
+| 跨进程恢复 | 见 §8。切换至 SQLite checkpointer 属于配置级改动，待出现多实例需求后再引入 |
 
-判据同样简单：新需求如果不同时增强「证据可溯源 / 过程可观察 / 结论可复核」这三条之一，就不进这一版。
+判断标准：新需求若不能增强证据可溯源、过程可观察、结论可复核三者之一，则不纳入当前版本。
 架构取舍的完整推演在 [`docs/01-architecture.md`](docs/01-architecture.md)。
