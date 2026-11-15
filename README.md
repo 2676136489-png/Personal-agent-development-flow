@@ -151,6 +151,8 @@ npm run dev                       # 127.0.0.1:5173
 - favicon、界面图标、文档截图：仓库内文件
 - 前端构建产物：`backend/webapp`，由 FastAPI 同源托管
 
+构建后执行 `npm run verify:assets` 可检查产物是否仍引用外部 CDN；CI 已接入该检查。
+
 **运行时仍需调用以下外部服务；它们属于服务依赖，不属于静态资源**：
 
 - LLM / Embedding：默认使用智谱 OpenAI 兼容端点

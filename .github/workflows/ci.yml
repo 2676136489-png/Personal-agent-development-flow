@@ -37,3 +37,5 @@ jobs:
         run: npm ci
       - name: Build (includes typecheck)
         run: npm run build
+      - name: Verify local assets
+        run: npm run verify:assets

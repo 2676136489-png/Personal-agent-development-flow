@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:assets": "node scripts/verify-local-assets.mjs"
   },
   "dependencies": {
     "motion": "^13.4.4",
