@@ -387,6 +387,9 @@ def _hit(
         "bm25_rank": int(bm25_rank[index]),
         "selected": selected,
         "preview": texts[index][:160],
+        # 完整块文本：命中卡片默认显示 160 字预览，用户点「展开全文」才用这份，
+        # 避免把长文本全量塞进首屏响应里反复渲染（数据仍在，只是按需展示）。
+        "content": texts[index],
     }
 
 

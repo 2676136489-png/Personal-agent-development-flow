@@ -115,10 +115,13 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* 横向滚动一律禁止：右边缘的巨型「07」要出血，任何一像素的横向滚动条都会让它抖 */
+/* 横向滚动一律禁止：右边缘的巨型「07」要出血，任何一像素的横向滚动条都会让它抖。
+   优先用 clip：hidden 会把另一轴的 visible 强制计算成 auto，html 与 body 各变成一个
+   滚动容器，部分浏览器上表现为「滚到底了但内容还没到底」。hidden 留给老浏览器兜底。 */
 html,
 body {
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 img,

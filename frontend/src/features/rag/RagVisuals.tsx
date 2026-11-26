@@ -614,43 +614,63 @@ interface HitListProps {
 export function HitList({ hits, focus, onFocus }: HitListProps) {
   const maxScore = Math.max(...hits.map((hit) => hit.score), 0.0001)
   const maxBm25 = Math.max(...hits.map((hit) => hit.bm25), 0.0001)
+  // 默认只显示 160 字预览；展开后用后端给的完整块文本，滚动页面不再「读不到后半段」
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
+
+  const toggle = (index: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }
 
   return (
     <ol className="rag-hits">
-      {hits.map((hit) => (
-        <li
-          key={`${hit.index}-${hit.selected ? 'y' : 'n'}`}
-          className="rag-hit"
-          data-selected={hit.selected ? 'true' : 'false'}
-          data-focus={focus === hit.index ? 'true' : 'false'}
-          onMouseEnter={() => onFocus(hit.index)}
-          onMouseLeave={() => onFocus(null)}
-        >
-          <span className="rag-hit__index">#{hit.index}</span>
-          <div className="rag-hit__body">
-            <div className="rag-hit__meta">
-              <span className="rag-hit__score">{hit.score}</span>
-              <span className="rag-hit__sep">·</span>
-              <span>向量 {hit.dense}（第 {hit.dense_rank} 名）</span>
-              <span className="rag-hit__sep">·</span>
-              <span>BM25 {hit.bm25}（第 {hit.bm25_rank} 名）</span>
-              {hit.selected && <span className="rag-hit__badge">进入上下文</span>}
+      {hits.map((hit) => {
+        const hasFull = !!hit.content && hit.content.length > hit.preview.length
+        const isOpen = expanded.has(hit.index)
+        return (
+          <li
+            key={`${hit.index}-${hit.selected ? 'y' : 'n'}`}
+            className="rag-hit"
+            data-selected={hit.selected ? 'true' : 'false'}
+            data-focus={focus === hit.index ? 'true' : 'false'}
+            onMouseEnter={() => onFocus(hit.index)}
+            onMouseLeave={() => onFocus(null)}
+          >
+            <span className="rag-hit__index">#{hit.index}</span>
+            <div className="rag-hit__body">
+              <div className="rag-hit__meta">
+                <span className="rag-hit__score">{hit.score}</span>
+                <span className="rag-hit__sep">·</span>
+                <span>向量 {hit.dense}（第 {hit.dense_rank} 名）</span>
+                <span className="rag-hit__sep">·</span>
+                <span>BM25 {hit.bm25}（第 {hit.bm25_rank} 名）</span>
+                {hit.selected && <span className="rag-hit__badge">进入上下文</span>}
+              </div>
+              <div className="rag-hit__bars">
+                <span className="rag-hit__track" title={`最终得分 ${hit.score}`}>
+                  <i className="rag-hit__bar rag-hit__bar--fused" style={{ width: `${(hit.score / maxScore) * 100}%` }} />
+                </span>
+                <span className="rag-hit__track" title={`向量相似度 ${hit.dense}`}>
+                  <i className="rag-hit__bar rag-hit__bar--dense" style={{ width: `${hit.dense * 100}%` }} />
+                </span>
+                <span className="rag-hit__track" title={`BM25 ${hit.bm25}`}>
+                  <i className="rag-hit__bar rag-hit__bar--bm25" style={{ width: `${(hit.bm25 / maxBm25) * 100}%` }} />
+                </span>
+              </div>
+              <p className="rag-hit__text">{isOpen ? (hit.content ?? hit.preview) : hit.preview}</p>
+              {hasFull && (
+                <button type="button" className="rag-hit__expand" onClick={() => toggle(hit.index)}>
+                  {isOpen ? '收起' : '展开全文'}
+                </button>
+              )}
             </div>
-            <div className="rag-hit__bars">
-              <span className="rag-hit__track" title={`最终得分 ${hit.score}`}>
-                <i className="rag-hit__bar rag-hit__bar--fused" style={{ width: `${(hit.score / maxScore) * 100}%` }} />
-              </span>
-              <span className="rag-hit__track" title={`向量相似度 ${hit.dense}`}>
-                <i className="rag-hit__bar rag-hit__bar--dense" style={{ width: `${hit.dense * 100}%` }} />
-              </span>
-              <span className="rag-hit__track" title={`BM25 ${hit.bm25}`}>
-                <i className="rag-hit__bar rag-hit__bar--bm25" style={{ width: `${(hit.bm25 / maxBm25) * 100}%` }} />
-              </span>
-            </div>
-            <p className="rag-hit__text">{hit.preview}</p>
-          </div>
-        </li>
-      ))}
+          </li>
+        )
+      })}
     </ol>
   )
 }
