@@ -288,10 +288,11 @@ function depthOpacity(depth: number): number {
   return 0.34 + t * 0.62
 }
 
-const AXIS_ENDS: { vector: Vec3; label: string }[] = [
-  { vector: { x: 1, y: 0, z: 0 }, label: 'PC1' },
-  { vector: { x: 0, y: 1, z: 0 }, label: 'PC2' },
-  { vector: { x: 0, y: 0, z: 1 }, label: 'PC3' },
+/** 三条轴用不同线型区分，底部方差条沿用同一套线型，转起来也不会认错方向。 */
+const AXIS_ENDS: { vector: Vec3; label: string; dash: 'solid' | 'long' | 'dot' }[] = [
+  { vector: { x: 1, y: 0, z: 0 }, label: 'PC1', dash: 'solid' },
+  { vector: { x: 0, y: 1, z: 0 }, label: 'PC2', dash: 'long' },
+  { vector: { x: 0, y: 0, z: 1 }, label: 'PC3', dash: 'dot' },
 ]
 
 /**
@@ -335,13 +336,14 @@ export function VectorScatter({
 
   const axes = useMemo(
     () =>
-      AXIS_ENDS.map(({ vector, label }) => {
+      AXIS_ENDS.map(({ vector, label, dash }) => {
         const near = toScreen(rotatePoint({ x: -vector.x, y: -vector.y, z: -vector.z }, yaw, pitch))
         const far = toScreen(rotatePoint(vector, yaw, pitch))
+        // 标签推到立方体外：贴在棱上会和框线、数据点糊成一团
         const tip = toScreen(
-          rotatePoint({ x: vector.x * 1.16, y: vector.y * 1.16, z: vector.z * 1.16 }, yaw, pitch),
+          rotatePoint({ x: vector.x * 1.32, y: vector.y * 1.32, z: vector.z * 1.32 }, yaw, pitch),
         )
-        return { label, near, far, tip }
+        return { label, dash, near, far, tip }
       }),
     [yaw, pitch],
   )
@@ -429,11 +431,26 @@ export function VectorScatter({
         onKeyDown={onKeyDown}
         onDoubleClick={reset}
       >
+        {/* 四角刻度代替整圈亮描边：边界还在，但视觉重心留给里面的数据 */}
+        <g className="rag-scatter__ticks" aria-hidden="true">
+          <path d="M10 26 V10 H26" />
+          <path d={`M${VIEW_W - 26} 10 H${VIEW_W - 10} V26`} />
+          <path d={`M10 ${VIEW_H - 26} V${VIEW_H - 10} H26`} />
+          <path d={`M${VIEW_W - 26} ${VIEW_H - 10} H${VIEW_W - 10} V${VIEW_H - 26}`} />
+        </g>
+
+        <g className="rag-scatter__origin" aria-hidden="true">
+          <path
+            d={`M${CENTER_X - 9} ${CENTER_Y} h5 M${CENTER_X + 4} ${CENTER_Y} h5 M${CENTER_X} ${CENTER_Y - 9} v5 M${CENTER_X} ${CENTER_Y + 4} v5`}
+          />
+        </g>
+
         <g className="rag-scatter__frame">
           {CUBE_EDGES.map(([from, to]) => {
             const a = corners[from]
             const b = corners[to]
-            const opacity = 0.16 + 0.3 * ((a.depth + b.depth) / 2 + 1.2) / 2.4
+            // 远棱也要看得见：只靠 0.12 的下限，纯黑底上等于没画
+            const opacity = 0.42 + 0.48 * ((a.depth + b.depth) / 2 + 1.2) / 2.4
             return (
               <line
                 key={`${from}-${to}`}
@@ -442,15 +459,16 @@ export function VectorScatter({
                 x2={b.sx}
                 y2={b.sy}
                 className="rag-scatter__edge"
-                style={{ opacity: Math.max(0.12, Math.min(0.48, opacity)) }}
+                style={{ opacity: Math.max(0.42, Math.min(0.9, opacity)) }}
               />
             )
           })}
         </g>
 
         <g className="rag-scatter__axes">
-          {axes.map(({ label, near, far, tip }) => {
+          {axes.map(({ label, dash, near, far, tip }) => {
             const anchor = tip.sx > CENTER_X + 6 ? 'start' : tip.sx < CENTER_X - 6 ? 'end' : 'middle'
+            const dx = anchor === 'start' ? 5 : anchor === 'end' ? -5 : 0
             return (
               <g key={label}>
                 <line
@@ -459,10 +477,20 @@ export function VectorScatter({
                   x2={far.sx}
                   y2={far.sy}
                   className="rag-scatter__axis"
+                  data-dash={dash}
                 />
+                <line
+                  x1={far.sx}
+                  y1={far.sy}
+                  x2={tip.sx}
+                  y2={tip.sy}
+                  className="rag-scatter__axis-lead"
+                  data-dash={dash}
+                />
+                <circle cx={far.sx} cy={far.sy} r={2.4} className="rag-scatter__axis-tip" />
                 <text
-                  x={tip.sx}
-                  y={tip.sy + 3}
+                  x={tip.sx + dx}
+                  y={tip.sy + 3.5}
                   className="rag-scatter__axis-label"
                   textAnchor={anchor}
                 >
