@@ -6,7 +6,7 @@
  * 多加几十 KB 依赖；而它们本质都是「把比例映射成位置」，用 SVG 反而更直接。
  */
 
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 
 import type { RagChunk, RagEmbedDetail, RagHit, RagIndexDetail, RagOverlap, RagPoint } from '../../types/rag'
@@ -219,6 +219,9 @@ const CENTER_X = VIEW_W / 2
 const CENTER_Y = VIEW_H / 2
 /** 立方体半边长在屏幕上的像素基准；配合透视系数保证旋转到任何角度都不出框。 */
 const RADIUS = 82
+/** 滚轮缩放范围：只放大坐标间距，不放大点本身；到边界时放行滚轮，不挡翻页。 */
+const MIN_ZOOM = 0.7
+const MAX_ZOOM = 2.2
 const CAMERA = 3.4
 const PERSPECTIVE = 0.55
 const DEFAULT_YAW = -0.62
@@ -271,12 +274,13 @@ function rotatePoint(point: Vec3, yaw: number, pitch: number): Vec3 {
   return { x, y: point.y * cosPitch - z * sinPitch, z: point.y * sinPitch + z * cosPitch }
 }
 
-/** 弱透视投影：靠镜头的一侧稍微放大，纵深才看得出来；除得太狠会失真。 */
-function toScreen(point: Vec3): ScreenPoint {
+/** 弱透视投影：靠镜头的一侧稍微放大，纵深才看得出来；除得太狠会失真。
+ *  radius 由缩放倍率注入：只改坐标间距，不改 k —— 点本身不会跟着变大。 */
+function toScreen(point: Vec3, radius: number = RADIUS): ScreenPoint {
   const k = CAMERA / (CAMERA - point.z * PERSPECTIVE)
   return {
-    sx: CENTER_X + point.x * RADIUS * k,
-    sy: CENTER_Y - point.y * RADIUS * k,
+    sx: CENTER_X + point.x * radius * k,
+    sy: CENTER_Y - point.y * radius * k,
     k,
     depth: point.z,
   }
@@ -313,8 +317,34 @@ export function VectorScatter({
 }: VectorScatterProps) {
   const [yaw, setYaw] = useState(DEFAULT_YAW)
   const [pitch, setPitch] = useState(DEFAULT_PITCH)
+  const [zoom, setZoom] = useState(1)
   const [dragging, setDragging] = useState(false)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const zoomRef = useRef(1)
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
+
+  const applyZoom = useCallback((next: number) => {
+    const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, next))
+    zoomRef.current = clamped
+    setZoom(clamped)
+  }, [])
+
+  // React 的 onWheel 走 passive 监听，preventDefault 会被忽略、页面跟着滚。
+  // 必须挂原生非 passive 监听；缩放到边界时不拦事件，让滚轮继续翻页。
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const onWheel = (event: WheelEvent) => {
+      const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY
+      const prev = zoomRef.current
+      const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev * Math.exp(-delta * 0.0015)))
+      if (Math.abs(next - prev) < 1e-4) return
+      event.preventDefault()
+      applyZoom(next)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [applyZoom])
 
   // 用全局最大绝对值做归一化：三个轴之间的比例保持不变（PC3 确实比 PC1 扁），
   // 同时所有点都落在立方体里，转到任何角度都不会跑出画面。
@@ -329,23 +359,27 @@ export function VectorScatter({
     return max > 0 ? 1 / (max * 1.06) : 1
   }, [points, queryPoint])
 
+  // zoom 只改投影半径：立方体、坐标轴、点一起推开，但字号、线宽、点半径不变
+  const radius = RADIUS * zoom
+
   const corners = useMemo(
-    () => CUBE_CORNERS.map((corner) => toScreen(rotatePoint(corner, yaw, pitch))),
-    [yaw, pitch],
+    () => CUBE_CORNERS.map((corner) => toScreen(rotatePoint(corner, yaw, pitch), radius)),
+    [yaw, pitch, radius],
   )
 
   const axes = useMemo(
     () =>
       AXIS_ENDS.map(({ vector, label, dash }) => {
-        const near = toScreen(rotatePoint({ x: -vector.x, y: -vector.y, z: -vector.z }, yaw, pitch))
-        const far = toScreen(rotatePoint(vector, yaw, pitch))
+        const near = toScreen(rotatePoint({ x: -vector.x, y: -vector.y, z: -vector.z }, yaw, pitch), radius)
+        const far = toScreen(rotatePoint(vector, yaw, pitch), radius)
         // 标签推到立方体外：贴在棱上会和框线、数据点糊成一团
         const tip = toScreen(
           rotatePoint({ x: vector.x * 1.32, y: vector.y * 1.32, z: vector.z * 1.32 }, yaw, pitch),
+          radius,
         )
         return { label, dash, near, far, tip }
       }),
-    [yaw, pitch],
+    [yaw, pitch, radius],
   )
 
   const dots = useMemo(
@@ -354,6 +388,7 @@ export function VectorScatter({
         .map((point) => {
           const screen = toScreen(
             rotatePoint({ x: point.x * unit, y: point.y * unit, z: point.z * unit }, yaw, pitch),
+            radius,
           )
           return {
             point,
@@ -367,18 +402,25 @@ export function VectorScatter({
           if (a.selected !== b.selected) return a.selected ? 1 : -1
           return a.screen.depth - b.screen.depth
         }),
-    [points, unit, yaw, pitch, selectedIndexes, focus],
+    [points, unit, yaw, pitch, radius, selectedIndexes, focus],
   )
 
   const query = queryPoint
-    ? toScreen(rotatePoint({ x: queryPoint.x * unit, y: queryPoint.y * unit, z: queryPoint.z * unit }, yaw, pitch))
+    ? toScreen(
+        rotatePoint({ x: queryPoint.x * unit, y: queryPoint.y * unit, z: queryPoint.z * unit }, yaw, pitch),
+        radius,
+      )
     : null
 
-  const moved = Math.abs(yaw - DEFAULT_YAW) > 1e-3 || Math.abs(pitch - DEFAULT_PITCH) > 1e-3
+  const moved =
+    Math.abs(yaw - DEFAULT_YAW) > 1e-3 ||
+    Math.abs(pitch - DEFAULT_PITCH) > 1e-3 ||
+    Math.abs(zoom - 1) > 1e-3
 
   const reset = () => {
     setYaw(DEFAULT_YAW)
     setPitch(DEFAULT_PITCH)
+    applyZoom(1)
   }
 
   const onPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -411,6 +453,8 @@ export function VectorScatter({
     else if (event.key === 'ArrowRight') setYaw((value) => value + step)
     else if (event.key === 'ArrowUp') setPitch((value) => Math.max(-PITCH_LIMIT, value - step))
     else if (event.key === 'ArrowDown') setPitch((value) => Math.min(PITCH_LIMIT, value + step))
+    else if (event.key === '+' || event.key === '=') applyZoom(zoomRef.current * 1.12)
+    else if (event.key === '-' || event.key === '_') applyZoom(zoomRef.current / 1.12)
     else return
     event.preventDefault()
   }
@@ -418,10 +462,11 @@ export function VectorScatter({
   return (
     <div className="rag-scatter-wrap">
       <svg
+        ref={svgRef}
         className="rag-scatter"
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         role="img"
-        aria-label="块与问题在三维向量空间中的投影，可拖动或按方向键旋转"
+        aria-label="块与问题在三维向量空间中的投影，可拖动或按方向键旋转，滚轮或加减键缩放"
         tabIndex={0}
         data-dragging={dragging ? 'true' : 'false'}
         onPointerDown={onPointerDown}
@@ -592,7 +637,10 @@ export function VectorScatter({
             ))}
           </ul>
         )}
-        <span className="rag-scatter__hint">{dragging ? '松开停住' : '拖动旋转'}</span>
+        <span className="rag-scatter__hint">{dragging ? '松开停住' : '拖动旋转 · 滚轮缩放'}</span>
+        <span className="rag-scatter__zoom" aria-label={`当前缩放 ${zoom.toFixed(1)} 倍`}>
+          {zoom.toFixed(1)}×
+        </span>
         {moved && (
           <button type="button" className="rag-scatter__reset" onClick={reset}>
             复位
