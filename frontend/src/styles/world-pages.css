@@ -2623,18 +2623,21 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 8px 14px;
   margin-top: 10px;
 }
 
 .rag-scatter__pc {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   margin: 0;
   padding: 0;
   list-style: none;
-  flex: 1;
-  min-width: 200px;
+  /* 独占一行：两列布局下这块只有 472px，三条方差条 + 提示 + 复位挤在一行会
+     把 PC3 压到「拖动旋转」上（实测重叠 11px）。放不下时让方差条自己换行。 */
+  flex: 1 1 100%;
+  min-width: 0;
 }
 
 .rag-scatter__pc li {
@@ -2642,6 +2645,8 @@
   grid-template-columns: 30px 46px auto;
   align-items: center;
   gap: 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: 11px;
   color: var(--fg-2);
 }
@@ -2679,6 +2684,8 @@
   font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--fg-2);
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .rag-scatter__reset {
@@ -2690,6 +2697,8 @@
   font: inherit;
   font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
+  flex: 0 0 auto;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease;
 }
@@ -2810,6 +2819,8 @@
   }
   .rag-scatter__pc {
     flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: flex-start;
     gap: 8px;
   }
   .guide__item {
